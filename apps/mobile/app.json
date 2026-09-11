@@ -1,0 +1,26 @@
+﻿{
+    "expo":  {
+                 "name":  "Medical SaaS",
+                 "slug":  "mobile",
+                 "version":  "0.1.0",
+                 "orientation":  "portrait",
+                 "scheme":  "medical-saas",
+                 "userInterfaceStyle":  "light",
+                 "newArchEnabled":  false,
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "bundleIdentifier":  "com.medicalsaas.app"
+                         },
+                 "android":  {
+                                 "package":  "com.medicalsaas.app"
+                             },
+                 "plugins":  [
+                                 "expo-dev-client"
+                             ],
+                 "extra":  {
+                               "eas":  {
+                                           "projectId":  "2cef2f8a-2d96-4473-addd-eb58e193771a"
+                                       }
+                           }
+             }
+}

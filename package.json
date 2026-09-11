@@ -1,0 +1,17 @@
+{
+  "name": "medical-saas",
+  "private": true,
+  "packageManager": "pnpm@9.1.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev:backend": "pnpm --filter @medical/backend dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,sql}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
+}
