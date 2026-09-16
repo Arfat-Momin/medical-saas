@@ -1,6 +1,9 @@
 import { supabaseForUser } from '../../config/supabase.js';
 import { pharmacyRepository as repo } from './pharmacy.repository.js';
+import { billingRepository } from '../billing/billing.repository.js';
+import { billingService } from '../billing/billing.service.js';
 import { BadRequest, NotFound } from '../../utils/errors.js';
+import { logger } from '../../config/logger.js';
 import { audit } from '../../middleware/audit.js';
 import type { AuthContext } from '@medical/shared';
 import type {
@@ -130,6 +133,15 @@ export const pharmacyService = {
     return result;
   },
 
+  // BARCODE LOOKUP
+  async getMedicineByBarcode(auth: AuthContext, token: string, barcode: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const med = await repo.findMedicineByBarcode(client, auth.tenantId, barcode);
+    if (!med) throw NotFound('Medicine not found for this barcode');
+    return med;
+  },
+
   // DISPENSE
   async dispense(auth: AuthContext, token: string, input: DispenseInput) {
     if (!auth.tenantId) throw NotFound('No tenant context');
@@ -158,6 +170,17 @@ export const pharmacyService = {
       entityId: result.dispenseId,
       after: { totalAmount: result.totalAmount, itemCount: input.items.length },
     });
+
+    // Sync the encounter's unified invoice (adds pharmacy items to the
+    // same invoice that carries consultation + lab items).
+    if (input.encounterId) {
+      try {
+        const inv = await billingService.syncEncounterInvoice(auth, token, input.encounterId);
+        return { ...result, invoiceId: inv.invoiceId };
+      } catch (e) {
+        logger.warn({ encounterId: input.encounterId, err: e }, 'Invoice sync after dispense failed');
+      }
+    }
 
     return result;
   },

@@ -2,6 +2,7 @@ import { supabaseForUser } from '../../config/supabase.js';
 import { billingRepository as repo } from './billing.repository.js';
 import { BadRequest, NotFound, Conflict } from '../../utils/errors.js';
 import { audit } from '../../middleware/audit.js';
+import { logger } from '../../config/logger.js';
 import type { AuthContext } from '@medical/shared';
 import type {
   CreateBillableItemInput, UpdateBillableItemInput, ListBillableItemsQuery,
@@ -96,13 +97,19 @@ export const billingService = {
     if (!inv) throw NotFound('Invoice not found');
     if (inv.status === 'CANCELLED') throw Conflict('Invoice is cancelled');
     if (inv.status === 'PAID') throw Conflict('Invoice already fully paid');
-    if (input.amount > Number(inv.balance_amount)) throw BadRequest(`Payment exceeds balance (Rs.${inv.balance_amount})`);
+    const balance = Number(inv.balance_amount);
+    if (!Number.isFinite(balance)) throw BadRequest('Invoice has invalid balance');
+    const EPSILON = 0.005; // half a paisa
+    if (input.amount - balance > EPSILON) {
+      throw BadRequest(`Payment exceeds balance (Rs.${balance.toFixed(2)})`);
+    }
+    const effectiveAmount = Math.min(input.amount, balance);
 
     const result = await repo.recordPayment(client, {
       tenantId: auth.tenantId,
       userId: auth.userId,
       invoiceId,
-      amount: input.amount,
+      amount: effectiveAmount,
       method: input.method,
       reference: input.reference ?? null,
       notes: input.notes ?? null,
@@ -146,6 +153,80 @@ export const billingService = {
     return result;
   },
 
+    // ---- Sub-invoice list for the detail page ----
+  async listSubInvoices(auth: AuthContext, token: string, invoiceId: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+
+    const parent = await repo.findInvoiceFull(client, auth.tenantId, invoiceId);
+    if (!parent) throw NotFound('Invoice not found');
+
+    const rows = await repo.listSubInvoicesForPatient(client, auth.tenantId, parent.patient_id);
+    return { rows };
+  },
+
+  // ---- Update discount on the combined invoice ----
+  async updateDiscount(
+    auth: AuthContext,
+    token: string,
+    invoiceId: string,
+    discount: number,
+  ) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+
+    const inv = await repo.findInvoiceFull(client, auth.tenantId, invoiceId);
+    if (!inv) throw NotFound('Invoice not found');
+    if (inv.status === 'CANCELLED') throw Conflict('Invoice is cancelled');
+
+    const subtotal = Number(inv.subtotal) || 0;
+    const tax      = Number(inv.tax_amount) || 0;
+    const paid     = Number(inv.paid_amount) || 0;
+
+    const total   = Math.max(subtotal - discount + tax, 0);
+    const balance = Math.max(total - paid, 0);
+    const status  = paid <= 0 ? 'UNPAID' : paid >= total ? 'PAID' : 'PARTIAL';
+
+    const updated = await repo.updateInvoiceFields(client, auth.tenantId, invoiceId, {
+      discount_amount: discount,
+      total_amount:    total,
+      balance_amount:  balance,
+      status,
+      updated_at:      new Date().toISOString(),
+    });
+
+    await audit({
+      actorUserId: auth.userId,
+      action: 'INVOICE_DISCOUNT_UPDATED',
+      entity: 'invoices',
+      entityId: invoiceId,
+      before: { discount_amount: inv.discount_amount, total_amount: inv.total_amount },
+      after:  { discount_amount: discount,           total_amount: total },
+    });
+
+    return updated;
+  },
+// ---- Sync the encounter's single invoice ----
+  // Called after every event that could add billable items:
+  //   - encounter completion (consultation fee)
+  //   - lab order creation (lab items)
+  //   - pharmacy dispense (pharmacy items)
+  // Idempotent at the DB layer (unique index on invoice_items + recompute trigger).
+  async syncEncounterInvoice(auth: AuthContext, token: string, encounterId: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+
+    const { data, error } = await client.rpc('sync_invoice_from_encounter', {
+      p_tenant_id:    auth.tenantId,
+      p_user_id:      auth.userId,
+      p_encounter_id: encounterId,
+    });
+    if (error) {
+      logger.error({ encounterId, error: error.message }, 'sync_invoice_from_encounter failed');
+      throw error;
+    }
+    return { invoiceId: data as string };
+  },
   // ---- Auto-bill from encounter ----
   async invoiceFromEncounter(auth: AuthContext, token: string, input: InvoiceFromEncounterInput) {
     if (!auth.tenantId) throw NotFound('No tenant context');
@@ -214,4 +295,17 @@ export const billingService = {
       items,
     });
   },
-};
+
+  // ---- Per-department invoice views ----
+  async listDoctorInvoices(auth: AuthContext, token: string, q: ListInvoicesQuery) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    return repo.listInvoices(supabaseForUser(token), auth.tenantId, { ...q, invoiceType: 'DOCTOR' });
+  },
+  async listPharmacyInvoices(auth: AuthContext, token: string, q: ListInvoicesQuery) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    return repo.listInvoices(supabaseForUser(token), auth.tenantId, { ...q, invoiceType: 'PHARMACY' });
+  },
+  async listLabInvoices(auth: AuthContext, token: string, q: ListInvoicesQuery) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    return repo.listInvoices(supabaseForUser(token), auth.tenantId, { ...q, invoiceType: 'LAB' });
+  },};

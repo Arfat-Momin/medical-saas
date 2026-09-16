@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Plus, Search, UserPlus } from 'lucide-react';
+import { Copy, Plus, Search, UserPlus, Info } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -59,7 +59,7 @@ export function UsersPage() {
   }
 
   async function copyPassword() {
-    if (!invited) return;
+    if (!invited?.tempPassword) return;
     await navigator.clipboard.writeText(invited.tempPassword);
   }
 
@@ -185,30 +185,52 @@ export function UsersPage() {
         </form>
       </Modal>
 
-      {/* Temp password result modal */}
+      {/* Result modal — two flavours */}
       <Modal
         open={Boolean(invited)}
         onClose={() => setInvited(null)}
-        title="User invited"
+        title={invited?.existingUser ? 'User added to your hospital' : 'User invited'}
         footer={<Button onClick={() => setInvited(null)}>Done</Button>}
       >
         {invited && (
           <div className="space-y-3">
-            <Alert tone="success">
-              <strong>{invited.fullName}</strong> ({invited.email}) has been invited as <strong>{invited.roleCode}</strong>.
-            </Alert>
-            <div>
-              <p className="mb-1 text-xs font-medium text-slate-600">Temporary password (shown once)</p>
-              <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm">
-                <span className="flex-1 select-all">{invited.tempPassword}</span>
-                <button onClick={copyPassword} className="rounded p-1 hover:bg-slate-200" title="Copy">
-                  <Copy size={14} />
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Share this securely. The user should change it after first login.
-              </p>
-            </div>
+            {invited.existingUser ? (
+              <>
+                <Alert tone="success">
+                  <strong>{invited.fullName}</strong> ({invited.email}) already had a platform
+                  account and has been added to your hospital as{' '}
+                  <strong>{invited.roleCode}</strong>.
+                </Alert>
+                <Alert tone="info">
+                  <div className="flex items-start gap-2">
+                    <Info size={16} className="mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                      They keep the password they already use. The next time they sign in they
+                      will be able to switch to your hospital from the tenant picker.
+                    </div>
+                  </div>
+                </Alert>
+              </>
+            ) : (
+              <>
+                <Alert tone="success">
+                  <strong>{invited.fullName}</strong> ({invited.email}) has been invited as{' '}
+                  <strong>{invited.roleCode}</strong>.
+                </Alert>
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-600">Temporary password (shown once)</p>
+                  <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm">
+                    <span className="flex-1 select-all">{invited.tempPassword}</span>
+                    <button onClick={copyPassword} className="rounded p-1 hover:bg-slate-200" title="Copy">
+                      <Copy size={14} />
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Share this securely. The user should change it after first login.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Modal>

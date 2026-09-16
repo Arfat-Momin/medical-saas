@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Save, Shield } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Save, Shield, AlertTriangle, CheckCircle2, XCircle, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -9,10 +9,16 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Modal } from '@/components/ui/Modal';
 import { useRoles, useUpdateRolePermissions } from '@/hooks/useRoles';
 import { usePermissions } from '@/hooks/useAuth';
-import { PERMISSIONS } from '@medical/shared';
+import { PERMISSIONS, type Permission } from '@medical/shared';
 import type { Role } from '@/repositories/roles.repository';
 
-const CATALOG: { category: string; perms: { code: string; label: string }[] }[] = [
+/**
+ * UI catalog. Codes are pulled from the shared PERMISSIONS constant
+ * so a rename or addition in packages/shared shows up as a TypeScript
+ * error here instead of silently drifting. Labels are literal strings
+ * next to each code - they are purely cosmetic.
+ */
+const CATALOG: { category: string; perms: { code: Permission; label: string }[] }[] = [
   { category: 'Organization', perms: [
     { code: PERMISSIONS.ORG_MANAGE,        label: 'Manage organization' },
     { code: PERMISSIONS.BRANCH_MANAGE,     label: 'Manage branches' },
@@ -57,7 +63,10 @@ const CATALOG: { category: string; perms: { code: string; label: string }[] }[] 
 export function RolesPage() {
   const roles = useRoles();
   const { can } = usePermissions();
-  const [editing, setEditing] = useState<Role | null>(null);
+  const [viewingRole, setViewingRole] = useState<Role | null>(null);
+  const [editingRole, setEditingRole] = useState<Role | null>(null);
+
+  const canManage = can(PERMISSIONS.ROLE_MANAGE);
 
   return (
     <>
@@ -71,17 +80,14 @@ export function RolesPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {roles.data?.map((role) => (
-          <Card key={role.id}>
+          <Card
+            key={role.id}
+            className="group cursor-pointer transition-all hover:border-brand-300 hover:shadow-md"
+            onClick={() => setViewingRole(role)}
+          >
             <CardHeader
               title={role.name}
               subtitle={`${role.permissions.length} permission${role.permissions.length === 1 ? '' : 's'}`}
-              action={
-                can(PERMISSIONS.ROLE_MANAGE) ? (
-                  <Button variant="secondary" size="sm" onClick={() => setEditing(role)}>
-                    Edit
-                  </Button>
-                ) : null
-              }
             />
             <CardBody>
               <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
@@ -90,33 +96,118 @@ export function RolesPage() {
                 {role.is_system && <Badge tone="gray">system</Badge>}
               </div>
               <div className="flex flex-wrap gap-1">
-                {role.permissions.length === 0 && <span className="text-xs text-slate-400">No permissions assigned</span>}
-                {role.permissions.slice(0, 6).map((p) => (
+                {role.permissions.length === 0 && (
+                  <span className="text-xs text-slate-400">No permissions assigned</span>
+                )}
+                {role.permissions.slice(0, 3).map((p) => (
                   <Badge key={p} tone="blue">{p}</Badge>
                 ))}
-                {role.permissions.length > 6 && (
-                  <Badge tone="gray">+{role.permissions.length - 6} more</Badge>
+                {role.permissions.length > 3 && (
+                  <Badge tone="gray">+{role.permissions.length - 3} more</Badge>
                 )}
+              </div>
+              <div className="mt-3 flex items-center justify-end text-xs font-medium text-brand-600 opacity-0 transition-opacity group-hover:opacity-100">
+                View access <ChevronRight size={12} />
               </div>
             </CardBody>
           </Card>
         ))}
       </div>
 
-      <PermissionEditor role={editing} onClose={() => setEditing(null)} />
+      {/* View Role Modal */}
+      <Modal
+        open={Boolean(viewingRole)}
+        onClose={() => setViewingRole(null)}
+        title={viewingRole ? `${viewingRole.name} - Access List` : ''}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setViewingRole(null)}>Close</Button>
+            {canManage && viewingRole && (
+              <Button onClick={() => { setEditingRole(viewingRole); setViewingRole(null); }}>
+                Edit Permissions
+              </Button>
+            )}
+          </>
+        }
+      >
+        {viewingRole && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <Shield size={14} />
+              <span className="font-mono font-medium">{viewingRole.code}</span>
+              {viewingRole.is_system && <Badge tone="gray">System Role</Badge>}
+            </div>
+
+            {CATALOG.map((cat) => (
+              <div key={cat.category}>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {cat.category}
+                </h4>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {cat.perms.map((p) => {
+                    const hasPerm = viewingRole.permissions.includes(p.code);
+                    return (
+                      <div
+                        key={p.code}
+                        className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                          hasPerm
+                            ? 'border-green-200 bg-green-50 text-green-800'
+                            : 'border-slate-100 bg-slate-50 text-slate-400'
+                        }`}
+                      >
+                        {hasPerm ? (
+                          <CheckCircle2 size={14} className="shrink-0 text-green-600" />
+                        ) : (
+                          <XCircle size={14} className="shrink-0 text-slate-300" />
+                        )}
+                        <span className="flex-1">{p.label}</span>
+                        <span className="font-mono text-[10px] opacity-70">{p.code}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Role Modal (Existing Editor) */}
+      <PermissionEditor
+        key={editingRole?.id ?? 'closed'}
+        role={editingRole}
+        allRoles={roles.data ?? []}
+        onClose={() => setEditingRole(null)}
+      />
     </>
   );
 }
 
-function PermissionEditor({ role, onClose }: { role: Role | null; onClose: () => void }) {
+function PermissionEditor({
+  role,
+  allRoles,
+  onClose,
+}: {
+  role: Role | null;
+  allRoles: Role[];
+  onClose: () => void;
+}) {
   const update = useUpdateRolePermissions();
-  const [selected, setSelected] = useState<string[]>(role?.permissions ?? []);
+  const [selected, setSelected] = useState<string[]>(() => role?.permissions ?? []);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (role && !selected.length && role.permissions.length && !saved) {
-    // initialize on first open
-    setSelected(role.permissions);
-  }
+  const wouldLockOut = useMemo(() => {
+    if (!role) return false;
+    if (!role.permissions.includes(PERMISSIONS.ROLE_MANAGE)) return false;
+    if (selected.includes(PERMISSIONS.ROLE_MANAGE)) return false;
+
+    const otherRoles = allRoles.filter(
+      (r) => r.id !== role.id && r.permissions.includes(PERMISSIONS.ROLE_MANAGE),
+    );
+    return otherRoles.length === 0;
+  }, [role, selected, allRoles]);
 
   function toggle(code: string) {
     setSelected((s) => (s.includes(code) ? s.filter((x) => x !== code) : [...s, code]));
@@ -124,27 +215,52 @@ function PermissionEditor({ role, onClose }: { role: Role | null; onClose: () =>
 
   async function onSave() {
     if (!role) return;
-    await update.mutateAsync({ id: role.id, permissions: selected });
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 800);
+    setError(null);
+    try {
+      await update.mutateAsync({ id: role.id, permissions: selected });
+      setSaved(true);
+      setTimeout(() => { setSaved(false); onClose(); }, 800);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to save permissions');
+    }
   }
 
   return (
     <Modal
       open={Boolean(role)}
-      onClose={() => { setSaved(false); onClose(); }}
+      onClose={() => { setSaved(false); setError(null); onClose(); }}
       title={role ? `Edit permissions - ${role.name}` : ''}
       size="lg"
       footer={
         <>
-          <Button variant="secondary" onClick={() => { setSaved(false); onClose(); }}>Cancel</Button>
-          <Button onClick={onSave} loading={update.isPending}>
+          <Button variant="secondary" onClick={() => { setSaved(false); setError(null); onClose(); }}>
+            Cancel
+          </Button>
+          <Button onClick={onSave} loading={update.isPending} disabled={wouldLockOut}>
             <Save size={14} /> Save
           </Button>
         </>
       }
     >
       {saved && <Alert tone="success">Permissions updated.</Alert>}
+      {error && <div className="mb-3"><Alert tone="error">{error}</Alert></div>}
+      {wouldLockOut && (
+        <div className="mb-3">
+          <Alert tone="error">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <div>
+                <strong>Cannot remove "Manage roles & permissions"</strong>
+                <p className="mt-0.5 text-xs">
+                  This is the last role in your hospital holding that permission.
+                  Removing it would permanently lock everyone out of role editing.
+                  Grant it to another role first.
+                </p>
+              </div>
+            </div>
+          </Alert>
+        </div>
+      )}
       <div className="space-y-5">
         {CATALOG.map(({ category, perms }) => (
           <div key={category}>

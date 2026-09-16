@@ -2,7 +2,7 @@ import { api } from '@/lib/api';
 
 export interface Medicine {
   id: string; tenant_id: string;
-  code: string | null; name: string; generic_name: string | null;
+  code: string | null; barcode: string | null; name: string; generic_name: string | null;
   manufacturer: string | null; category: string | null; unit: string | null;
   hsn_code: string | null; gst_rate: number; reorder_level: number;
   is_active: boolean; created_at: string; updated_at: string;
@@ -50,6 +50,9 @@ export interface ExpiringRow {
 }
 
 export const pharmacyRepository = {
+  getMedicineByBarcode: (barcode: string) => 
+    api.get<Medicine & { batches: any[] }>(`/pharmacy/medicines/barcode/${barcode}`),
+
   listMedicines: (params: { search?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });

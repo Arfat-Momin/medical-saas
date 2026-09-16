@@ -23,7 +23,7 @@ export const updateLabTestSchema = createLabTestSchema.partial().extend({
 export const listLabTestsQuerySchema = z.object({
   search: z.string().max(100).optional(),
   page:   z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(20),
+  pageSize: z.coerce.number().int().min(1).max(500).default(20),
   activeOnly: z.coerce.boolean().default(true),
 });
 

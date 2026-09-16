@@ -29,6 +29,16 @@ appointmentsRouter.get(
 );
 
 appointmentsRouter.get(
+  '/invoices',
+  requirePermission(PERMISSIONS.APPOINTMENT_READ),
+  asyncHandler(async (req, res) => {
+    const raw = String(req.query.ids ?? '');
+    const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    res.json(await appointmentsService.doctorInvoicesByAppointments(req.auth!, getAccessToken(req), ids));
+  }),
+);
+
+appointmentsRouter.get(
   '/:id',
   requirePermission(PERMISSIONS.APPOINTMENT_READ),
   asyncHandler(async (req, res) => {
@@ -66,6 +76,7 @@ appointmentsRouter.patch(
   requirePermission(PERMISSIONS.APPOINTMENT_MANAGE),
   asyncHandler(async (req, res) => {
     const { status } = updateAppointmentStatusSchema.parse(req.body);
-    res.json(await appointmentsService.updateStatus(req.auth!, getAccessToken(req), req.params.id!, status));
+    const expected = (req.headers['x-expected-updated-at'] as string | undefined) || undefined;
+    res.json(await appointmentsService.updateStatus(req.auth!, getAccessToken(req), req.params.id!, status, expected));
   }),
 );

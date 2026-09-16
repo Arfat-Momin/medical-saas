@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { requirePermission } from '../../middleware/permissions.js';
+import { requirePermission, requireRole } from '../../middleware/permissions.js';
 import { getAccessToken } from '../../middleware/auth.js';
 import { PERMISSIONS } from '@medical/shared';
 import {
@@ -54,9 +54,11 @@ patientsRouter.post(
 
 patientsRouter.patch(
   '/:id',
+  requireRole('HOSPITAL_ADMIN'),
   requirePermission(PERMISSIONS.PATIENT_UPDATE),
   asyncHandler(async (req, res) => {
     const patch = updatePatientSchema.parse(req.body);
-    res.json(await patientsService.update(req.auth!, getAccessToken(req), req.params.id!, patch));
+    const expected = (req.headers['x-expected-updated-at'] as string | undefined) || undefined;
+    res.json(await patientsService.update(req.auth!, getAccessToken(req), req.params.id!, patch, expected));
   }),
 );

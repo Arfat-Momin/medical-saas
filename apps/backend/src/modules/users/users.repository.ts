@@ -13,7 +13,7 @@ export const usersRepository = {
             .from('memberships')
             .select(
                 `id, tenant_id, user_id, role_id, branch_id, is_active,
-         users:user_id ( id, email, full_name, phone, is_active ),
+         users:user_id ( id, email, full_name, phone, is_active, consultation_fee ),
          roles:role_id ( id, code, name ),
          branches:branch_id ( id, name, branch_code )`,
                 { count: 'exact' },
@@ -56,7 +56,7 @@ export const usersRepository = {
     async findProfileById(client: SupabaseClient, id: string) {
         const { data, error } = await client
             .from('users')
-            .select('id, email, full_name, phone, is_platform_admin, is_active, created_at, updated_at')
+            .select('id, email, full_name, phone, is_platform_admin, is_active, created_at, updated_at, consultation_fee')
             .eq('id', id)
             .maybeSingle();
         if (error) throw error;
@@ -82,12 +82,53 @@ export const usersRepository = {
             .from('users')
             .update(patch)
             .eq('id', id)
-            .select('id, email, full_name, phone, is_active')
+            .select('id, email, full_name, phone, is_active, consultation_fee')
             .single();
         if (error) throw error;
         return data;
     },
 
+    /**
+     * Toggle a user's membership in a SPECIFIC tenant.
+     *
+     * SECURITY: this is the correct way to "disable a user". It only
+     * affects `memberships.is_active` for the given tenant, so an
+     * admin in Tenant A cannot lock the same human out of Tenant B.
+     */
+    async setMembershipActive(
+        client: SupabaseClient,
+        tenantId: string,
+        userId: string,
+        isActive: boolean,
+    ) {
+        const { data, error } = await client
+            .from('memberships')
+            .update({ is_active: isActive })
+            .eq('tenant_id', tenantId)
+            .eq('user_id', userId)
+            .select('id, tenant_id, user_id, is_active')
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    /**
+     * Fetch a single membership row for a user in a tenant.
+     */
+    async findMembership(client: SupabaseClient, tenantId: string, userId: string) {
+        const { data, error } = await client
+            .from('memberships')
+            .select('id, is_active')
+            .eq('tenant_id', tenantId)
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (error) throw error;
+        return data;
+    },
+
+    /**
+     * @deprecated Use setMembershipActive(client, tenantId, userId, false).
+     */
     async deactivateMemberships(client: SupabaseClient, tenantId: string, userId: string) {
         const { error } = await client
             .from('memberships')

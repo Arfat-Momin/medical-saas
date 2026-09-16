@@ -20,7 +20,7 @@ export const listAppointmentsQuerySchema = z.object({
   patientId: z.string().uuid().optional(),
   status:    z.enum(['SCHEDULED','CHECKED_IN','IN_PROGRESS','COMPLETED','CANCELLED','NO_SHOW']).optional(),
   page:      z.coerce.number().int().min(1).default(1),
-  pageSize:  z.coerce.number().int().min(1).max(100).default(50),
+  pageSize:  z.coerce.number().int().min(1).max(500).default(100),
 });
 
 export type CreateAppointmentInput = z.infer<typeof createAppointmentSchema>;

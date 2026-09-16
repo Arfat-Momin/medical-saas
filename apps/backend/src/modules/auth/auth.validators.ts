@@ -9,6 +9,12 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 });
 
+export const googleSessionSchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1),
+  expiresAt: z.number().optional(),
+});
+
 export const registerDeviceSchema = z.object({
   deviceId: z.string().min(1),
   platform: z.enum(['web', 'ios', 'android']),

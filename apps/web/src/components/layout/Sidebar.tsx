@@ -1,97 +1,45 @@
-﻿import { NavLink } from 'react-router-dom';
-import {
-  Building2, LayoutDashboard, GitBranch, Users, Shield, Network,
-  ScrollText, Heart, Calendar, Pill, ShoppingCart, Boxes, Truck,
-  FlaskConical, Receipt, BadgeDollarSign, BedDouble, Hotel, Building,
-  Package,
-} from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { Activity } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
+import { getNavFor } from './nav-items';
 import { cn } from '@/lib/cn';
-
-interface NavItem  { to: string; label: string; icon: any }
-interface NavGroup { title?: string; items: NavItem[] }
-
-const hospitalNav: NavGroup[] = [
-  {
-    items: [
-      { to: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
-      { to: '/patients',    label: 'Patients',    icon: Heart },
-      { to: '/appointments',label: 'Appointments',icon: Calendar },
-    ],
-  },
-  {
-    title: 'IPD',
-    items: [
-      { to: '/ipd/admissions', label: 'Admissions', icon: BedDouble },
-      { to: '/ipd/beds',       label: 'Beds',       icon: Hotel },
-      { to: '/ipd/locations',  label: 'Locations',  icon: Building },
-    ],
-  },
-  {
-    title: 'Organization',
-    items: [
-      { to: '/organization',label: 'Organization',icon: Building2 },
-      { to: '/branches',    label: 'Branches',    icon: GitBranch },
-      { to: '/departments', label: 'Departments', icon: Network },
-      { to: '/users',       label: 'Users',       icon: Users },
-      { to: '/roles',       label: 'Roles',       icon: Shield },
-    ],
-  },
-  {
-    title: 'Pharmacy',
-    items: [
-      { to: '/pharmacy/medicines', label: 'Medicines', icon: Pill },
-      { to: '/pharmacy/suppliers', label: 'Suppliers', icon: Truck },
-      { to: '/pharmacy/purchases', label: 'Purchases', icon: ShoppingCart },
-      { to: '/pharmacy/stock',     label: 'Stock',     icon: Boxes },
-    ],
-  },
-  {
-    title: 'Laboratory',
-    items: [
-      { to: '/laboratory/tests',  label: 'Tests',      icon: FlaskConical },
-      { to: '/laboratory/orders', label: 'Lab Orders', icon: ScrollText },
-    ],
-  },
-  {
-    title: 'Billing',
-    items: [
-      { to: '/billing/items',    label: 'Billable Items', icon: BadgeDollarSign },
-      { to: '/billing/invoices', label: 'Invoices',       icon: Receipt },
-    ],
-  },
-];
-
-const platformNav: NavGroup[] = [
-  {
-    items: [
-      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { to: '/tenants',   label: 'Tenants',   icon: Building2 },
-      { to: '/plans',     label: 'Plans',     icon: Package },
-    ],
-  },
-];
 
 export function Sidebar() {
   const isPlatformAdmin = useAuthStore((s) => s.user?.isPlatformAdmin ?? false);
-  const groups = isPlatformAdmin ? platformNav : hospitalNav;
+  const tenantId = useAuthStore((s) => s.tenantId);
+  const groups = getNavFor(isPlatformAdmin);
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
-      <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600 text-xs font-bold text-white">M</div>
-        <span className="font-semibold text-slate-900">Medical SaaS</span>
+    <aside className="ios-enter hidden w-[248px] shrink-0 flex-col gap-3 p-3 md:flex">
+      {/* Brand card */}
+      <div className="glass-strong flex h-[60px] shrink-0 items-center gap-3 rounded-2xl px-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-glass">
+          <Activity size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-bold tracking-tight text-ink-900">MedSaaS</span>
+          {isPlatformAdmin ? (
+            <span className="mt-0.5 inline-flex items-center rounded-full bg-violet-100/80 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wider text-violet-700">
+              Platform
+            </span>
+          ) : (
+            <span className="mt-0.5 block text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+              Hospital Suite
+            </span>
+          )}
+        </div>
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+      {/* Nav */}
+      <nav className="glass-strong flex-1 space-y-5 overflow-y-auto rounded-2xl p-3 text-[13px]">
         {groups.map((group, gi) => (
           <div key={gi}>
             {group.title && (
-              <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
                 {group.title}
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {group.items.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
@@ -99,13 +47,19 @@ export function Sidebar() {
                   end={to === '/dashboard'}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                      isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                      'glass-tap flex items-center gap-3 rounded-xl px-3 py-2.5 font-medium transition-colors',
+                      isActive
+                        ? 'bg-gradient-to-r from-brand-500/12 to-brand-600/8 font-semibold text-brand-700 ring-1 ring-inset ring-brand-500/15'
+                        : 'text-ink-700 hover:bg-white/60 hover:text-ink-900',
                     )
                   }
                 >
-                  <Icon size={16} />
-                  {label}
+                  {({ isActive }) => (
+                    <>
+                      <Icon size={16} className={cn('shrink-0', isActive ? 'text-brand-600' : 'text-ink-400')} />
+                      <span className="truncate">{label}</span>
+                    </>
+                  )}
                 </NavLink>
               ))}
             </div>
@@ -113,7 +67,11 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-slate-200 p-3 text-xs text-slate-400">v0.1.0</div>
+      {/* Footer */}
+      <div className="shrink-0 px-2">
+        <p className="text-2xs text-ink-400">v0.1.0</p>
+        {tenantId && <p className="mt-0.5 font-mono text-2xs text-ink-400">{tenantId.slice(0, 8)}</p>}
+      </div>
     </aside>
   );
 }

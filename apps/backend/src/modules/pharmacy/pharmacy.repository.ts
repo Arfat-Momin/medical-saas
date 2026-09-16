@@ -175,4 +175,16 @@ export const pharmacyRepository = {
     const { data } = await client.from('branches').select('id').eq('tenant_id', tenantId).eq('is_active', true).order('branch_code').limit(1).maybeSingle();
     return data;
   },
+
+  async findMedicineByBarcode(client: SupabaseClient, tenantId: string, barcode: string) {
+    const { data, error } = await client
+      .from('medicines')
+      .select('*, batches:medicine_batches(current_qty, selling_price, mrp, batch_no)')
+      .eq('tenant_id', tenantId)
+      .eq('barcode', barcode)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
 };

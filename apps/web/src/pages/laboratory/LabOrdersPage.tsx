@@ -124,7 +124,18 @@ export function LabOrdersPage() {
                     <td className="px-5 py-3"><Badge tone={statusTone[o.status] ?? 'gray'}>{o.status}</Badge></td>
                     <td className="px-5 py-3 text-right font-mono">Rs.{o.total_amount.toFixed(2)}</td>
                     <td className="px-5 py-3 text-right">
-                      <Link to={`/laboratory/orders/${o.id}`} className="text-sm text-brand-600 hover:underline">Open</Link>
+                      <div className="flex justify-end items-center gap-2">
+                        <Link to={`/laboratory/orders/${o.id}`} className="text-sm text-brand-600 hover:underline">Open</Link>
+                        {o.lab_invoice && (
+                          <Link
+                            to={`/billing/invoices/${o.lab_invoice.id}`}
+                            className="rounded px-2 py-0.5 font-mono text-xs text-purple-700 bg-purple-50 hover:bg-purple-100"
+                            title={`Lab invoice Rs.${o.lab_invoice.total_amount.toFixed(2)}`}
+                          >
+                            {o.lab_invoice.invoice_no}
+                          </Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

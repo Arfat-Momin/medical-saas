@@ -6,17 +6,18 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   hint?: string;
   leftIcon?: ReactNode;
+  rightSlot?: ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, label, error, hint, id, leftIcon, ...rest },
+  { className, label, error, hint, id, leftIcon, rightSlot, ...rest },
   ref,
 ) {
   const inputId = id ?? rest.name;
   return (
     <div className="w-full">
       {label && (
-        <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-slate-700">
+        <label htmlFor={inputId} className="mb-1.5 block text-xs font-medium text-slate-600">
           {label}
         </label>
       )}
@@ -30,18 +31,25 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           ref={ref}
           id={inputId}
           className={cn(
-            'block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm',
-            'placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500',
-            'disabled:bg-slate-50 disabled:text-slate-500',
+            'block h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-base text-slate-900',
+            'placeholder:text-slate-400',
+            'transition-colors',
+            'focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10',
+            'disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed',
+            'read-only:bg-slate-50 read-only:text-slate-500',
             leftIcon && 'pl-9',
-            error && 'border-red-500 focus:border-red-500 focus:ring-red-500',
+            rightSlot && 'pr-10',
+            error && 'border-red-400 focus:border-red-500 focus:ring-red-500/10',
             className,
           )}
           {...rest}
         />
+        {rightSlot && (
+          <span className="absolute right-2 top-1/2 -translate-y-1/2">{rightSlot}</span>
+        )}
       </div>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      {hint && !error && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+      {hint && !error && <p className="mt-1.5 text-xs text-slate-500">{hint}</p>}
     </div>
   );
 });

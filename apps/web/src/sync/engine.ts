@@ -1,0 +1,381 @@
+import { db, meta } from '@/db';
+import { api, ApiError } from '@/lib/api';
+import { syncQueue as queue } from './queue';
+import { patientsRepository } from '@/repositories/patients.repository';
+import { appointmentsRepository } from '@/repositories/appointments.repository';
+import { encountersRepository } from '@/repositories/encounters.repository';
+import { doctorsRepository } from '@/repositories/doctors.repository';
+import {
+  medicinesLocalRepository,
+  labTestsLocalRepository,
+  organizationLocalRepository,
+  branchesLocalRepository,
+  encounterHeadersLocalRepository,
+} from '@/repositories/offline.repositories';
+import { useAuthStore } from '@/stores/auth.store';
+import type { QueueItem } from '@/db/schema';
+
+const PAGE_SIZE = 500;
+
+interface PushResult {
+  pushed: number;
+  failed: number;
+  pulled: number;
+  skipped: number;
+}
+
+type Handler = (item: QueueItem, payload: any) => Promise<void>;
+
+const handlers: Record<string, Handler> = {
+  async patients(item, payload) {
+    if (item.operation === 'create') {
+      const res = await api.post<{ id: string; uhid: string; updated_at: string }>(
+        '/patients',
+        { ...payload, skipDuplicateCheck: true },
+        { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+      );
+      await patientsRepository.applyCreateSuccess(item.local_id, res);
+      await queue.unblockDependencies(item.local_id);
+      return;
+    }
+    if (item.operation === 'update') {
+      const local = await db.patients.get(item.local_id);
+      const serverId = local?.server_id ?? payload.serverId;
+      if (!serverId) throw new Error('Patient not yet synced');
+      try {
+        const res = await api.patch<{ updated_at?: string }>(
+          `/patients/${serverId}`,
+          payload.patch,
+          { expectedUpdatedAt: payload.expectedUpdatedAt, idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+        );
+        await patientsRepository.markSynced(item.local_id, res?.updated_at);
+      } catch (e: any) {
+        if (e instanceof ApiError && e.status === 409 && (e.details as any)?.conflict) {
+          await queue.markConflict(item.id, `CONFLICT: ${e.message}`);
+          await patientsRepository.applySyncError(item.local_id, `CONFLICT: ${e.message}`);
+          return;
+        }
+        throw e;
+      }
+      return;
+    }
+    if (item.operation === 'delete' && payload?.serverId) {
+      await api.delete(`/patients/${payload.serverId}`, { idempotencyKey: item.idempotency_key, deviceId: item.device_id });
+    }
+  },
+
+  async appointments(item, payload) {
+    if (item.operation === 'create') {
+      if (!payload.patientId) throw new Error('Waiting for patient to sync first');
+      const res = await api.post<{ id: string; queue_token: number | null; updated_at: string }>(
+        '/appointments',
+        {
+          patientId: payload.patientId,
+          doctorId: payload.doctorId,
+          appointmentDate: payload.appointmentDate,
+          slotTime: payload.slotTime ?? undefined,
+          chiefComplaint: payload.chiefComplaint ?? null,
+          notes: payload.notes ?? null,
+        },
+        { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+      );
+      await appointmentsRepository.applyCreateSuccess(item.local_id, res);
+      return;
+    }
+    if (item.operation === 'update') {
+      const local = await db.appointments.get(item.local_id);
+      const serverId = local?.server_id ?? payload.serverId;
+      if (!serverId) throw new Error('Appointment not yet synced');
+      if (payload.patch?.status === 'CHECKED_IN') {
+        try {
+          const res = await api.post<{ queue_token: number | null; updated_at: string }>(
+            `/appointments/${serverId}/check-in`,
+            undefined,
+            { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+          );
+          await appointmentsRepository.applyCreateSuccess(item.local_id, {
+            id: serverId,
+            queue_token: res.queue_token,
+            updated_at: res.updated_at,
+          });
+        } catch (e: any) {
+          if (e instanceof ApiError && e.status === 409) { await appointmentsRepository.markSynced(item.local_id); return; }
+          throw e;
+        }
+        return;
+      }
+      if (payload.patch?.status) {
+        try {
+          const res = await api.patch<{ updated_at?: string }>(
+            `/appointments/${serverId}/status`,
+            { status: payload.patch.status },
+            { expectedUpdatedAt: payload.expectedUpdatedAt, idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+          );
+          await appointmentsRepository.markSynced(item.local_id, res?.updated_at);
+        } catch (e: any) {
+          if (e instanceof ApiError && e.status === 409) { await appointmentsRepository.markSynced(item.local_id); return; }
+          throw e;
+        }
+        return;
+      }
+      await appointmentsRepository.markSynced(item.local_id);
+      return;
+    }
+    if (item.operation === 'delete') {
+      const local = await db.appointments.get(item.local_id);
+      const serverId = local?.server_id ?? payload.serverId;
+      if (serverId) await api.delete(`/appointments/${serverId}`, { idempotencyKey: item.idempotency_key, deviceId: item.device_id });
+    }
+  },
+
+  async encounters(item, _payload) {
+    const local = await db.encounters.get(item.local_id);
+    if (!local) throw new Error('Encounter missing locally');
+    let serverId: string | null = local.server_id;
+    if (!serverId) {
+      if (local.appointment_local_id) {
+        const appt = await db.appointments.get(local.appointment_local_id);
+        if (!appt?.server_id) throw new Error('Waiting for appointment to sync first');
+        const startRes = await api.post<{ id: string }>(
+          `/appointments/${appt.server_id}/start`, undefined,
+          { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+        );
+        serverId = startRes.id;
+      } else {
+        if (!local.patient_server_id) throw new Error('Waiting for patient to sync first');
+        const startRes = await api.post<{ id: string }>(
+          '/opd/encounters',
+          { patientId: local.patient_server_id, doctorId: local.doctor_id, chiefComplaint: local.chief_complaint ?? null },
+          { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+        );
+        serverId = startRes.id;
+      }
+      await encountersRepository.setServerId(item.local_id, serverId);
+    }
+    try {
+      const res = await api.patch<{ updated_at?: string }>(
+        `/opd/encounters/${serverId}`,
+        {
+          chiefComplaint: local.chief_complaint,
+          history: local.history,
+          examination: local.examination,
+          notes: local.notes,
+          vitals: local.vitals ?? undefined,
+          diagnoses: (local.diagnoses ?? []).map((x) => ({ diagnosisText: x.diagnosisText, icdCode: x.icdCode, notes: x.notes, isPrimary: x.isPrimary })),
+          prescription: local.prescription ?? undefined,
+          labTests: (local.labTests ?? []).map((x) => ({
+            testId: x.testId, testCode: x.testCode ?? null, testName: x.testName,
+            sampleType: x.sampleType ?? null, price: Number(x.price ?? 0), referenceText: x.referenceText ?? null,
+          })),
+          complete: local.status === 'COMPLETED',
+        },
+        { expectedUpdatedAt: local.server_updated_at ?? undefined, idempotencyKey: item.idempotency_key, deviceId: item.device_id },
+      );
+      await encountersRepository.markSynced(item.local_id, res?.updated_at);
+    } catch (e: any) {
+      if (e instanceof ApiError && e.status === 409 && /already completed/i.test(e.message)) {
+        await encountersRepository.markSynced(item.local_id);
+        return;
+      }
+      if (e instanceof ApiError && e.status === 409 && (e.details as any)?.conflict) {
+        await queue.markConflict(item.id, `CONFLICT: ${e.message}`);
+        await encountersRepository.applySyncError(item.local_id, `CONFLICT: ${e.message}`);
+        return;
+      }
+      throw e;
+    }
+  },
+};
+
+interface PullResponse {
+  rows: any[];
+  serverTime: string;
+  hasMore: boolean;
+}
+
+async function pullPaginated(
+  entity: string,
+  metaKey: string,
+  applyRow: (row: any) => Promise<void>,
+): Promise<number> {
+  let total = 0;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const since = await meta.get(metaKey);
+    const url =
+      `/sync/pull?entity=${entity}&limit=${PAGE_SIZE}&offset=${offset}` +
+      (since ? `&since=${encodeURIComponent(since)}` : '');
+
+    const res = await api.get<PullResponse>(url);
+    for (const row of res.rows) {
+      await applyRow(row);
+      total++;
+    }
+    await meta.set(metaKey, res.serverTime);
+    hasMore = res.hasMore;
+    offset += PAGE_SIZE;
+  }
+  return total;
+}
+
+async function pullSingle(
+  entity: string,
+  metaKey: string,
+  applyRow: (row: any) => Promise<void>,
+): Promise<number> {
+  const since = await meta.get(metaKey);
+  const url =
+    `/sync/pull?entity=${entity}` + (since ? `&since=${encodeURIComponent(since)}` : '');
+  const res = await api.get<PullResponse>(url);
+  for (const row of res.rows) await applyRow(row);
+  await meta.set(metaKey, res.serverTime);
+  return res.rows.length;
+}
+
+export const syncEngine = {
+  running: false,
+  stopRequested: false,
+
+  stop(): void {
+    // Called before wiping the local DB (logout / 401). Signals the
+    // run loop to exit between items so we never leave an item in an
+    // 'inflight' state with the queue being cleared underneath it.
+    this.stopRequested = true;
+  },
+
+  async run(): Promise<PushResult> {
+    if (this.running) return { pushed: 0, failed: 0, pulled: 0, skipped: 0 };
+    if (!useAuthStore.getState().accessToken) return { pushed: 0, failed: 0, pulled: 0, skipped: 0 };
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return { pushed: 0, failed: 0, pulled: 0, skipped: 0 };
+    }
+    this.running = true;
+    this.stopRequested = false;
+    const result: PushResult = { pushed: 0, failed: 0, pulled: 0, skipped: 0 };
+    try {
+      await queue.resetInflight();
+      const items = await queue.pending(20);
+      for (const item of items) {
+        if (this.stopRequested) break;
+        const handler = handlers[item.entity];
+        if (!handler) { await queue.markFailed(item.id, `No handler for entity ${item.entity}`); result.skipped++; continue; }
+        await queue.markInflight(item.id);
+        try {
+          const raw = item.payload;
+          const payload: any = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          await handler(item, payload);
+          await queue.markDone(item.id);
+          result.pushed++;
+        } catch (e: any) {
+          const errMsg = e instanceof ApiError ? `${e.status} ${e.code}: ${e.message}` : e?.message ?? 'unknown';
+          if (errMsg.includes('Waiting for')) {
+            await queue.markBlocked(item.id, errMsg);
+            result.skipped++;
+          } else {
+            await queue.markFailed(item.id, errMsg);
+            if (item.entity === 'patients') await patientsRepository.applySyncError(item.local_id, errMsg);
+            result.failed++;
+          }
+        }
+      }
+    } finally { this.running = false; }
+    return result;
+  },
+
+  async pull(): Promise<number> {
+  const token = useAuthStore.getState().accessToken;
+  const tenantId = useAuthStore.getState().tenantId;
+  if (!token || !tenantId) return 0;
+
+  let pulled = 0;
+
+  // Per-tenant cursor keys. A single global cursor survives tenant
+  // switches, Dexie schema upgrades, and manual table clears, which
+  // makes the server return zero rows on every subsequent pull.
+  const cursorKey = (entity: string) => `last_pull_at:${tenantId}:${entity}`;
+
+  const pullIncremental = async (
+    entity: 'patients' | 'appointments',
+    localCount: () => Promise<number>,
+    upsert: (row: any) => Promise<unknown>,
+  ) => {
+    // Self-heal: an empty local table makes any stored cursor meaningless.
+    const count = await localCount();
+    const since = count === 0 ? null : await meta.get(cursorKey(entity));
+
+    const url =
+      `/sync/pull?entity=${entity}` +
+      (since ? `&since=${encodeURIComponent(since)}` : '');
+
+    const res = await api.get<{ rows: any[]; serverTime: string }>(url);
+
+    for (const row of res.rows) {
+      try {
+        await upsert(row);
+        pulled++;
+      } catch (err) {
+        console.warn(`[sync] ${entity} upsert failed for ${row?.id}`, err);
+      }
+    }
+
+    // Advance the cursor only after we have fully processed the response.
+    await meta.set(cursorKey(entity), res.serverTime);
+  };
+
+  try {
+    await pullIncremental(
+      'patients',
+      () => db.patients.count(),
+      (row) => patientsRepository.upsertFromServer(row),
+    );
+  } catch (err) {
+    console.warn('[sync] patients pull failed', err);
+  }
+
+  try {
+    await pullIncremental(
+      'appointments',
+      () => db.appointments.count(),
+      (row) => appointmentsRepository.upsertFromServer(row),
+    );
+  } catch (err) {
+    console.warn('[sync] appointments pull failed', err);
+  }
+
+  // Doctors: small list, always a full pull (no cursor).
+  try {
+    const res = await api.get<{ rows: any[] }>('/sync/pull?entity=doctors');
+    for (const row of res.rows) {
+      try {
+        await doctorsRepository.upsertFromServer(row);
+      } catch (err) {
+        console.warn(`[sync] doctors upsert failed for ${row?.id}`, err);
+      }
+    }
+  } catch (err) {
+    console.warn('[sync] doctors pull failed', err);
+  }
+
+  return pulled;
+},
+
+  async sync(): Promise<PushResult> {
+    const push = await this.run();
+    const pulled = await this.pull();
+    return { ...push, pulled };
+  },
+
+  async forceFullResync(): Promise<PushResult> {
+    await meta.set('last_pull_at', '');
+    await meta.set('last_pull_appt_at', '');
+    await meta.set('last_pull_doc_at', '');
+    await meta.set('last_pull_med_at', '');
+    await meta.set('last_pull_labtest_at', '');
+    await meta.set('last_pull_org_at', '');
+    await meta.set('last_pull_branch_at', '');
+    await meta.set('last_pull_enc_at', '');
+    return this.sync();
+  },
+};

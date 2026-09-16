@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { getAccessToken } from '../../middleware/auth.js';
@@ -8,8 +8,11 @@ import { rolesService } from './roles.service.js';
 
 export const rolesRouter = Router();
 
+// SECURITY: role definitions (including their permission arrays) are
+// admin-only metadata. Gate every read with ROLE_MANAGE.
 rolesRouter.get(
   '/',
+  requirePermission(PERMISSIONS.ROLE_MANAGE),
   asyncHandler(async (req, res) => {
     res.json(await rolesService.list(req.auth!, getAccessToken(req)));
   }),
@@ -17,6 +20,7 @@ rolesRouter.get(
 
 rolesRouter.get(
   '/:id',
+  requirePermission(PERMISSIONS.ROLE_MANAGE),
   asyncHandler(async (req, res) => {
     res.json(await rolesService.getById(req.auth!, getAccessToken(req), req.params.id!));
   }),

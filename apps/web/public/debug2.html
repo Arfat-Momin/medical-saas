@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Endpoint Check</title>
+  <style>
+    body { font-family: monospace; font-size: 12px; padding: 10px; background: #0f172a; color: #e2e8f0; }
+    table { border-collapse: collapse; width: 100%; }
+    td { padding: 3px 6px; border-bottom: 1px solid #1e293b; }
+    .ok   { color: #4ade80; }
+    .bad  { color: #f87171; }
+    .warn { color: #fbbf24; }
+  </style>
+</head>
+<body>
+<h3>Endpoint check</h3>
+<table id="t"></table>
+<pre id="detail" style="margin-top:12px;"></pre>
+<script>
+(async () => {
+  const t = document.getElementById('t');
+  const detail = document.getElementById('detail');
+
+  const raw = localStorage.getItem('medical_auth');
+  const token = raw ? JSON.parse(raw)?.state?.accessToken : null;
+  if (!token) { t.innerHTML = '<tr><td class="bad">No token</td></tr>'; return; }
+
+  const H = { Authorization: 'Bearer ' + token };
+
+  const endpoints = [
+    '/auth/me',
+    '/organizations/me',
+    '/branches?activeOnly=true',
+    '/departments?activeOnly=true',
+    '/users?page=1&pageSize=5',
+    '/roles',
+    '/patients?page=1&pageSize=1',
+    '/appointments?page=1&pageSize=1',
+    '/opd/encounters?page=1&pageSize=1',
+    '/pharmacy/medicines?page=1&pageSize=1',
+    '/pharmacy/suppliers',
+    '/pharmacy/batches',
+    '/pharmacy/purchases?page=1&pageSize=1',
+    '/pharmacy/alerts/low-stock',
+    '/pharmacy/alerts/expiring',
+    '/pharmacy-queue?pageSize=1',
+    '/laboratory/tests?page=1&pageSize=1',
+    '/laboratory/orders?page=1&pageSize=1',
+    '/billing/items?page=1&pageSize=1',
+    '/billing/invoices?page=1&pageSize=1',
+    '/ipd/locations',
+    '/ipd/beds',
+    '/ipd/admissions?page=1&pageSize=1',
+  ];
+
+  for (const ep of endpoints) {
+    const row = t.insertRow();
+    const c1 = row.insertCell(0); c1.textContent = ep;
+    const c2 = row.insertCell(1);
+    const started = performance.now();
+    try {
+      const r = await fetch('/api/v1' + ep, { headers: H });
+      const ms = Math.round(performance.now() - started);
+      c2.textContent = r.status + ' (' + ms + 'ms)';
+      c2.className = r.ok ? 'ok' : 'bad';
+      if (!r.ok) {
+        const body = await r.text();
+        detail.textContent += '--- ' + ep + '\n' + body.slice(0, 300) + '\n\n';
+      }
+    } catch (e) {
+      const ms = Math.round(performance.now() - started);
+      c2.textContent = 'ERR (' + ms + 'ms)';
+      c2.className = 'bad';
+      detail.textContent += '--- ' + ep + '\n' + String(e) + '\n\n';
+    }
+  }
+  detail.textContent += '\nDONE';
+})();
+</script>
+</body>
+</html>

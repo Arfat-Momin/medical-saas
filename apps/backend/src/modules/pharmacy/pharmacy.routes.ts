@@ -13,6 +13,13 @@ import { pharmacyService } from './pharmacy.service.js';
 export const pharmacyRouter = Router();
 
 // Medicines
+pharmacyRouter.get('/medicines/barcode/:barcode',
+  requirePermission(PERMISSIONS.PHARMACY_READ),
+  asyncHandler(async (req, res) => {
+    res.json(await pharmacyService.getMedicineByBarcode(req.auth!, getAccessToken(req), req.params.barcode!));
+  }),
+);
+
 pharmacyRouter.get('/medicines',
   requirePermission(PERMISSIONS.PHARMACY_READ),
   asyncHandler(async (req, res) => {

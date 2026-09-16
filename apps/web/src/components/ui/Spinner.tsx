@@ -9,9 +9,9 @@ export function Spinner({ className, size = 20 }: { className?: string; size?: n
   );
 }
 
-export function FullPageSpinner({ label = 'Loading...' }: { label?: string }) {
+export function FullPageSpinner({ label = 'Loading…' }: { label?: string }) {
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-3 text-slate-500">
+    <div className="flex h-screen flex-col items-center justify-center gap-4 bg-slate-50 text-slate-500">
       <Spinner size={32} />
       <p className="text-sm">{label}</p>
     </div>

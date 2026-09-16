@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Medical SaaS Debug</title>
+  <style>
+    body { font-family: monospace; font-size: 12px; padding: 12px; background: #0f172a; color: #e2e8f0; }
+    pre { white-space: pre-wrap; word-break: break-all; }
+    .ok { color: #4ade80; }
+    .bad { color: #f87171; }
+    .warn { color: #fbbf24; }
+  </style>
+</head>
+<body>
+<pre id="out">Loading...</pre>
+<script>
+(async () => {
+  const out = document.getElementById('out');
+  const log = [];
+  const write = (s) => { log.push(s); out.textContent = log.join('\n'); };
+  const line = (label, value) => write(label.padEnd(24) + ': ' + value);
+
+  try {
+    line('ORIGIN', window.location.origin);
+    line('UA', navigator.userAgent.slice(0, 60));
+    line('Online', navigator.onLine);
+
+    // 1. Auth store on this device
+    write(''); write('--- AUTH STORE ---');
+    const raw = localStorage.getItem('medical_auth');
+    line('has medical_auth', !!raw);
+    if (!raw) { write('<span class="bad">NO AUTH STORE - not logged in on this device</span>'); }
+    const parsed = raw ? JSON.parse(raw) : null;
+    const token = parsed && parsed.state ? parsed.state.accessToken : null;
+    line('has accessToken', !!token);
+    line('token length', token ? token.length : 0);
+
+    // 2. Decode JWT claims
+    if (token) {
+      write(''); write('--- JWT CLAIMS ---');
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        line('sub (userId)', payload.sub);
+        line('tenant_id', payload.tenant_id || '(MISSING)');
+        line('is_platform_admin', payload.is_platform_admin);
+        line('exp', new Date(payload.exp * 1000).toISOString());
+        line('expired?', Date.now() > payload.exp * 1000 ? 'YES' : 'no');
+      } catch (e) {
+        write('<span class="bad">Failed to decode JWT: ' + e.message + '</span>');
+      }
+    }
+
+    // 3. Test public endpoint (no auth)
+    write(''); write('--- TEST 1: public endpoint (/subscriptions/plans) ---');
+    try {
+      const r = await fetch('/api/v1/subscriptions/plans');
+      const body = await r.text();
+      line('status', r.status);
+      write('body: ' + body.slice(0, 300));
+    } catch (e) {
+      write('<span class="bad">FAILED: ' + String(e) + '</span>');
+    }
+
+    // 4. Test authenticated endpoint (/auth/me)
+    if (token) {
+      write(''); write('--- TEST 2: authenticated (/auth/me) ---');
+      try {
+        const r = await fetch('/api/v1/auth/me', {
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        const body = await r.text();
+        line('status', r.status);
+        write('body: ' + body.slice(0, 400));
+      } catch (e) {
+        write('<span class="bad">FAILED: ' + String(e) + '</span>');
+      }
+
+      // 5. Test data endpoint (/patients)
+      write(''); write('--- TEST 3: data (/patients?page=1&pageSize=1) ---');
+      try {
+        const r = await fetch('/api/v1/patients?page=1&pageSize=1', {
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        const body = await r.text();
+        line('status', r.status);
+        write('body: ' + body.slice(0, 500));
+      } catch (e) {
+        write('<span class="bad">FAILED: ' + String(e) + '</span>');
+      }
+
+      // 6. Test /pharmacy/medicines
+      write(''); write('--- TEST 4: pharmacy (/pharmacy/medicines?page=1&pageSize=1) ---');
+      try {
+        const r = await fetch('/api/v1/pharmacy/medicines?page=1&pageSize=1', {
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        const body = await r.text();
+        line('status', r.status);
+        write('body: ' + body.slice(0, 400));
+      } catch (e) {
+        write('<span class="bad">FAILED: ' + String(e) + '</span>');
+      }
+    }
+
+    // 7. Test direct backend (bypassing Vite proxy)
+    write(''); write('--- TEST 5: direct backend health (bypass proxy) ---');
+    try {
+      const host = window.location.hostname;
+      const r = await fetch('http://' + host + ':4000/health');
+      const body = await r.text();
+      line('status', r.status);
+      write('body: ' + body.slice(0, 200));
+    } catch (e) {
+      write('<span class="warn">Direct backend unreachable (expected unless firewall allows): ' + String(e) + '</span>');
+    }
+
+    write(''); write('--- DONE ---');
+    write('Screenshot this and paste it back.');
+  } catch (e) {
+    out.textContent += '\nFATAL: ' + String(e);
+  }
+})();
+</script>
+</body>
+</html>

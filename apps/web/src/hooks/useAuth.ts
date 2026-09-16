@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/auth.store';
 
 export function useMeSync() {
   const accessToken = useAuthStore((s) => s.accessToken);
-  const setContext = useAuthStore((s) => s.setContext);
+  const setContext   = useAuthStore((s) => s.setContext);
 
   const query = useQuery({
     queryKey: ['me'],
@@ -18,6 +18,7 @@ export function useMeSync() {
     if (query.data?.auth) {
       setContext({
         tenantId: query.data.auth.tenantId,
+        primaryBranchId: query.data.primaryBranchId ?? null,
         roles: query.data.auth.roles,
         permissions: query.data.auth.permissions,
       });

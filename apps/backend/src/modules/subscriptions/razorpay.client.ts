@@ -1,9 +1,9 @@
-﻿import Razorpay from 'razorpay';
+import Razorpay from 'razorpay';
 import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 
 if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
-  logger.warn('Razorpay keys missing — subscription payments will not work');
+  logger.warn('Razorpay keys missing - subscription payments will not work');
 }
 
 export const razorpay = env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET

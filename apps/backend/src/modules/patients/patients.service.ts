@@ -1,6 +1,7 @@
 import { supabaseForUser } from '../../config/supabase.js';
 import { patientsRepository } from './patients.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
+import { assertNoConflict } from '../../utils/conflict.js';
 import { audit } from '../../middleware/audit.js';
 import type { AuthContext } from '@medical/shared';
 import type {
@@ -89,12 +90,16 @@ export const patientsService = {
     return patient;
   },
 
-  async update(auth: AuthContext, token: string, id: string, patch: UpdatePatientInput) {
+  async update(auth: AuthContext, token: string, id: string, patch: UpdatePatientInput, req_expectedUpdatedAt?: string) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const client = supabaseForUser(token);
 
     const before = await patientsRepository.findById(client, auth.tenantId, id);
     if (!before) throw NotFound('Patient not found');
+
+    // Conflict detection - if the client told us which version it saw, verify it
+    const expected = req_expectedUpdatedAt;
+    assertNoConflict(expected, before.updated_at, before);
 
     const dbPatch: Record<string, unknown> = {};
     if (patch.fullName !== undefined)         dbPatch.full_name = patch.fullName;

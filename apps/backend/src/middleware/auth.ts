@@ -11,6 +11,17 @@ declare global {
   }
 }
 
+function firstRelation<T>(rel: T | T[] | null | undefined): T | null {
+  if (!rel) return null;
+  if (Array.isArray(rel)) return (rel[0] as T) ?? null;
+  return rel as T;
+}
+
+interface RoleRow {
+  code: string;
+  permissions: string[] | null;
+}
+
 export const authenticate: RequestHandler = async (req, _res, next) => {
   try {
     const header = req.headers.authorization;
@@ -20,46 +31,78 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     const { data, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !data.user) throw Unauthorized('Invalid or expired token');
 
-    const jwt = decodeJwtPayload(token);
-    const tenantId = (jwt.tenant_id as string | undefined) ?? null;
-    const isPlatformAdmin = Boolean(jwt.is_platform_admin);
+    const userId = data.user.id;
 
+    const { data: profile, error: profErr } = await supabaseAdmin
+      .from('users')
+      .select('id, email, is_platform_admin, is_active')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profErr) throw Unauthorized('Failed to verify user');
+    if (!profile) throw Unauthorized('User profile not found');
+    if (profile.is_active === false) throw Unauthorized('Account disabled');
+
+    const isPlatformAdmin = profile.is_platform_admin === true;
+    const jwt = decodeJwtPayload(token);
+
+    let tenantId: string | null = null;
     let roles: string[] = [];
     let permissions: string[] = [];
-
-    if (tenantId) {
-      const { data: memberships } = await supabaseAdmin
-        .from('memberships')
-        .select('roles:role_id ( code, permissions )')
-        .eq('user_id', data.user.id)
-        .eq('tenant_id', tenantId)
-        .eq('is_active', true);
-
-      roles = (memberships ?? []).map((m: any) => m.roles?.code).filter(Boolean);
-      const explicit = (memberships ?? [])
-        .flatMap((m: any) => (m.roles?.permissions ?? []) as string[])
-        .filter(Boolean);
-
-      permissions = explicit.length
-        ? Array.from(new Set(explicit))
-        : Array.from(new Set(roles.flatMap((r) => DEFAULT_ROLE_PERMISSIONS[r as never] ?? [])));
-    }
+    let hasTenantMembership = false;
 
     if (isPlatformAdmin) {
-      permissions = [...DEFAULT_ROLE_PERMISSIONS.SUPER_ADMIN];
+      tenantId = null;
+      hasTenantMembership = false;
       roles = ['SUPER_ADMIN'];
+      permissions = [...DEFAULT_ROLE_PERMISSIONS.SUPER_ADMIN];
+    } else {
+      const requestedTenantId = (jwt.tenant_id as string | undefined) ?? null;
+
+      if (requestedTenantId) {
+        const { data: memberships, error: memErr } = await supabaseAdmin
+          .from('memberships')
+          .select('roles:role_id ( code, permissions )')
+          .eq('user_id', userId)
+          .eq('tenant_id', requestedTenantId)
+          .eq('is_active', true);
+
+        if (memErr) throw Unauthorized('Failed to verify membership');
+
+        if (memberships && memberships.length > 0) {
+          tenantId = requestedTenantId;
+          hasTenantMembership = true;
+
+          const roleRows: RoleRow[] = memberships
+            .map((m: any) => firstRelation(m.roles))
+            .filter((r: any): r is RoleRow => Boolean(r && typeof r.code === 'string'));
+
+          roles = roleRows.map((r) => r.code);
+
+          const explicit = roleRows
+            .flatMap((r) => (r.permissions ?? []) as string[])
+            .filter(Boolean);
+
+          permissions = explicit.length > 0
+            ? Array.from(new Set(explicit))
+            : Array.from(new Set(roles.flatMap((r) => DEFAULT_ROLE_PERMISSIONS[r as never] ?? [])));
+        }
+      }
     }
 
     req.auth = {
-      userId: data.user.id,
-      email: data.user.email ?? '',
+      userId,
+      email: data.user.email ?? profile.email ?? '',
       tenantId,
       isPlatformAdmin,
       roles,
       permissions,
+      hasTenantMembership,
     };
     next();
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 };
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -73,7 +116,6 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 export const requireAuth: RequestHandler = (req, _res, next) =>
   req.auth ? next() : next(Unauthorized());
 
-/** Extract the raw JWT from the Authorization header (after authenticate() has run). */
 export function getAccessToken(req: Request): string {
   const h = req.headers.authorization;
   if (!h?.startsWith('Bearer ')) throw Unauthorized();

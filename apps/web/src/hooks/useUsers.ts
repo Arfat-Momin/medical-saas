@@ -1,4 +1,4 @@
-﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usersRepository, type InviteUserInput } from '@/repositories/users.repository';
 
 const KEY = ['users'];
@@ -29,7 +29,7 @@ export function useInviteUser() {
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: { fullName?: string; phone?: string | null; isActive?: boolean } }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: { fullName?: string; phone?: string | null; isActive?: boolean; consultationFee?: number } }) =>
       usersRepository.update(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });

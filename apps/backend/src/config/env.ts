@@ -1,5 +1,10 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { config as dotenvConfig } from 'dotenv';
+import path from 'node:path';
+dotenvConfig({ path: path.resolve(process.cwd(), '.env') });
+console.log('[env] cwd:', process.cwd());
+console.log('[env] SUPABASE_URL:', process.env.SUPABASE_URL?.slice(0, 40) + '...');
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),

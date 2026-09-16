@@ -1,4 +1,4 @@
-﻿import crypto from 'node:crypto';
+import crypto from 'node:crypto';
 import { supabaseAdmin } from '../../config/supabase.js';
 import { env } from '../../config/env.js';
 import { subscriptionsRepository as repo } from './subscriptions.repository.js';
@@ -39,23 +39,38 @@ export const subscriptionsService = {
       slug = baseSlug + '-' + randomSuffix();
       attempts++;
     }
-    if (attempts >= 5) throw Conflict('Could not generate a unique hospital slug — try a different name');
+    if (attempts >= 5) throw Conflict('Could not generate a unique hospital slug - try a different name');
 
     const existing = await repo.findByEmailPending(supabaseAdmin, input.email);
     if (existing) {
       throw Conflict('You already have a pending signup. Complete the payment or wait 24h before retrying.');
     }
 
-    const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-      email: input.email,
-      password: input.password,
-      email_confirm: true,
-      user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
-    });
-    if (authErr || !authUser.user) {
-      throw BadRequest(authErr?.message ?? 'Failed to create user account');
+    let authUserId: string;
+    let createdNewAuthUser = false;
+
+    if (input.googleAccessToken) {
+      // Google signup: reuse the existing Supabase auth user.
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(input.googleAccessToken);
+      if (error || !user) throw Unauthorized('Invalid Google session');
+      if ((user.email ?? '').toLowerCase() !== input.email.toLowerCase()) {
+        throw BadRequest('Google email does not match the signup email');
+      }
+      authUserId = user.id;
+    } else {
+      // Password signup: create a fresh auth user.
+      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: input.email,
+        password: input.password!,
+        email_confirm: true,
+        user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
+      });
+      if (authErr || !authUser.user) {
+        throw BadRequest(authErr?.message ?? 'Failed to create user account');
+      }
+      authUserId = authUser.user.id;
+      createdNewAuthUser = true;
     }
-    const authUserId = authUser.user.id;
 
     try {
       const order = await rzp.orders.create({
@@ -89,7 +104,9 @@ export const subscriptionsService = {
         razorpayKeyId: env.RAZORPAY_KEY_ID,
       };
     } catch (e) {
-      await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+      if (createdNewAuthUser) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+      }
       throw e;
     }
   },
@@ -170,7 +187,7 @@ export const subscriptionsService = {
 
       const signup = await repo.findByOrderId(supabaseAdmin, orderId);
       if (!signup) {
-        logger.warn({ orderId }, 'No pending_signup matches order_id — ignoring');
+        logger.warn({ orderId }, 'No pending_signup matches order_id - ignoring');
         return { ok: true, handled: false, reason: 'signup_not_found' };
       }
 

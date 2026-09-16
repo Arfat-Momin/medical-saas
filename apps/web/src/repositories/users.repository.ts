@@ -7,7 +7,7 @@ export interface UserRow {
   role_id: string;
   branch_id: string | null;
   is_active: boolean;
-  users: { id: string; email: string; full_name: string; phone: string | null; is_active: boolean };
+  users: { id: string; email: string; full_name: string; phone: string | null; is_active: boolean; consultation_fee: number };
   roles: { id: string; code: string; name: string };
   branches: { id: string; name: string; branch_code: string } | null;
 }
@@ -33,7 +33,13 @@ export interface InviteUserResponse {
   fullName: string;
   roleCode: string;
   branchId: string | null;
-  tempPassword: string;
+  /**
+   * Only present when a NEW auth account was provisioned.
+   * `null` when an existing platform user was attached to this tenant.
+   */
+  tempPassword: string | null;
+  /** True when the email already existed on the platform. */
+  existingUser: boolean;
 }
 
 export const usersRepository = {
@@ -44,6 +50,6 @@ export const usersRepository = {
   },
   getById: (id: string) => api.get<{ profile: any; memberships: any[] }>(`/users/${id}`),
   invite: (input: InviteUserInput) => api.post<InviteUserResponse>('/users', input),
-  update: (id: string, patch: { fullName?: string; phone?: string | null; isActive?: boolean }) =>
+  update: (id: string, patch: { fullName?: string; phone?: string | null; isActive?: boolean; consultationFee?: number }) =>
     api.patch<any>(`/users/${id}`, patch),
 };

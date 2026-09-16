@@ -68,11 +68,13 @@ export const laboratoryRepository = {
     if (!order) return null;
 
     const { data: items, error: iErr } = await client
-      .from('lab_order_items').select(ITEM_SELECT).eq('order_id', id).order('created_at');
+      .from('lab_order_items').select(ITEM_SELECT)
+      .eq('tenant_id', tenantId).eq('order_id', id).order('created_at');
     if (iErr) throw iErr;
 
     const { data: samples } = await client
-      .from('lab_samples').select('*').eq('order_id', id).order('collected_at');
+      .from('lab_samples').select('*')
+      .eq('tenant_id', tenantId).eq('order_id', id).order('collected_at');
 
     return { ...order, items: items ?? [], samples: samples ?? [] };
   },

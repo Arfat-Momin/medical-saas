@@ -5,9 +5,9 @@ const nz = z.union([z.number(), z.string(), z.null()]).optional();
 // ---- Medicines ----
 export const createMedicineSchema = z.object({
   code: z.string().max(50).nullable().optional(),
-  name: z.string().min(1).max(200),
-  genericName: z.string().max(200).nullable().optional(),
-  manufacturer: z.string().max(200).nullable().optional(),
+  name: z.string().min(1).max(500),
+  genericName: z.string().max(500).nullable().optional(),
+  manufacturer: z.string().max(500).nullable().optional(),
   category: z.string().max(50).nullable().optional(),
   unit: z.string().max(20).nullable().optional(),
   hsnCode: z.string().max(20).nullable().optional(),
@@ -29,8 +29,8 @@ export const listMedicinesQuerySchema = z.object({
 // ---- Suppliers ----
 export const createSupplierSchema = z.object({
   code: z.string().max(50).nullable().optional(),
-  name: z.string().min(1).max(200),
-  contactPerson: z.string().max(200).nullable().optional(),
+  name: z.string().min(1).max(500),
+  contactPerson: z.string().max(500).nullable().optional(),
   phone: z.string().max(20).nullable().optional(),
   email: z.string().email().nullable().optional(),
   address: z.string().max(500).nullable().optional(),

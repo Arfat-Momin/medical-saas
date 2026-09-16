@@ -2,22 +2,14 @@ import { supabaseAdmin } from '../../config/supabase.js';
 import { platformAdminRepository as repo } from './platform-admin.repository.js';
 import { BadRequest, NotFound } from '../../utils/errors.js';
 import { audit } from '../../middleware/audit.js';
+import { invalidateTenantStatus } from '../../middleware/tenantContext.js';
 import type { AuthContext } from '@medical/shared';
 import type {
   ListTenantsQuery, UpdateTenantInput, ExtendSubscriptionInput,
   CreatePlanInput, UpdatePlanInput,
 } from './platform-admin.validators.js';
 
-/**
- * The platform-admin module uses the service-role client on purpose:
- * Super Admin needs to read/write the platform tables regardless of RLS.
- * The middleware `requirePlatformAdmin` gates every route — nobody else
- * can call this module.
- *
- * Deliberately: this service NEVER touches hospital tables.
- */
 export const platformAdminService = {
-  // ---- Tenants ----
   async listTenants(auth: AuthContext, q: ListTenantsQuery) {
     if (!auth.isPlatformAdmin) throw NotFound('Platform admin only');
     return repo.listTenants(supabaseAdmin, q);
@@ -44,6 +36,8 @@ export const platformAdminService = {
     if (Object.keys(patch).length === 0) return before;
 
     const after = await repo.updateTenant(supabaseAdmin, id, patch);
+    if (input.status !== undefined) invalidateTenantStatus(id);
+
     await audit({
       actorUserId: auth.userId,
       action: 'TENANT_UPDATED',
@@ -64,6 +58,7 @@ export const platformAdminService = {
     const newEndsAt = new Date(base.getTime() + input.days * 24 * 60 * 60 * 1000).toISOString();
 
     const after = await repo.extendSubscription(supabaseAdmin, sub.id, newEndsAt);
+    invalidateTenantStatus(tenantId);
 
     await audit({
       actorUserId: auth.userId,
@@ -77,7 +72,6 @@ export const platformAdminService = {
     return after;
   },
 
-  // ---- Plans ----
   async listPlans(auth: AuthContext) {
     if (!auth.isPlatformAdmin) throw NotFound('Platform admin only');
     return repo.listPlans(supabaseAdmin);
@@ -117,7 +111,6 @@ export const platformAdminService = {
     return after;
   },
 
-  // ---- Dashboard ----
   async dashboard(auth: AuthContext) {
     if (!auth.isPlatformAdmin) throw NotFound('Platform admin only');
     const stats = await repo.dashboardStats(supabaseAdmin);

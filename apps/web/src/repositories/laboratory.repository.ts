@@ -42,6 +42,7 @@ export interface LabOrder {
   branches?: { id: string; name: string; branch_code: string };
   items?: LabOrderItem[];
   samples?: LabSample[];
+  lab_invoice?: { id: string; invoice_no: string; total_amount: number; status: string } | null;
 }
 
 export const laboratoryRepository = {

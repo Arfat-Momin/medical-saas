@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 .pnpm-store/
 
@@ -13,27 +13,6 @@ out/
 .env.local
 .env.*.local
 !.env.example
-
-# Expo / React Native
-.expo/
-.expo-shared/
-.expo-dev-client/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
-ios/Pods/
-ios/build/
-android/.gradle/
-android/app/build/
-android/build/
-android/local.properties
-
-# EAS
-apps/mobile/eas-build-*.tar.gz
 
 # Logs
 *.log
@@ -57,3 +36,6 @@ supabase/.temp/
 .turbo/
 coverage/
 *.tsbuildinfo
+
+# Stale build output
+apps/web/dist/

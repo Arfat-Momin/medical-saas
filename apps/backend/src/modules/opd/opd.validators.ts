@@ -36,6 +36,14 @@ export const saveEncounterSchema = z.object({
       quantity:     z.union([z.number(), z.string(), z.null()]).optional(),
     })).default([]),
   }).optional(),
+  labTests: z.array(z.object({
+    testId:        z.string().uuid(),
+    testCode:      z.string().nullable().optional(),
+    testName:      z.string().min(1).max(200),
+    sampleType:    z.string().nullable().optional(),
+    price:         z.coerce.number().nonnegative().default(0),
+    referenceText: z.string().nullable().optional(),
+  })).optional(),
   complete: z.boolean().default(false),
 });
 
@@ -57,3 +65,23 @@ export const listEncountersQuerySchema = z.object({
 export type SaveEncounterInput = z.infer<typeof saveEncounterSchema>;
 export type CreateWalkInInput = z.infer<typeof createWalkInSchema>;
 export type ListEncountersQuery = z.infer<typeof listEncountersQuerySchema>;
+
+// ---------- Admin-only prescription editor ----------
+// Deliberately narrow: only the prescription body. More sections can be
+// added later without changing the route or permission model.
+export const adminEditPrescriptionSchema = z.object({
+  prescription: z.object({
+    notes: z.string().max(1000).nullable().optional(),
+    items: z.array(z.object({
+      medicineName: z.string().min(1).max(200),
+      dosage:       z.string().max(50).nullable().optional(),
+      frequency:    z.string().max(50).nullable().optional(),
+      duration:     z.string().max(50).nullable().optional(),
+      route:        z.string().max(50).nullable().optional(),
+      instructions: z.string().max(500).nullable().optional(),
+      quantity:     z.union([z.number(), z.string(), z.null()]).optional(),
+    })).default([]),
+  }).nullable(),
+});
+
+export type AdminEditPrescriptionInput = z.infer<typeof adminEditPrescriptionSchema>;

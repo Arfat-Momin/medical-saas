@@ -13,12 +13,9 @@ const RZP_SCRIPT = 'https://checkout.razorpay.com/v1/checkout.js';
 
 function loadRazorpay(): Promise<boolean> {
   return new Promise((resolve) => {
-    if (window.Razorpay) return resolve(true);
+    if ((window as any).Razorpay) return resolve(true);
     const existing = document.querySelector(`script[src="${RZP_SCRIPT}"]`);
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true));
-      return;
-    }
+    if (existing) { existing.addEventListener('load', () => resolve(true)); return; }
     const s = document.createElement('script');
     s.src = RZP_SCRIPT;
     s.onload = () => resolve(true);
@@ -28,13 +25,8 @@ function loadRazorpay(): Promise<boolean> {
 }
 
 interface FormValues {
-  contactName: string;
-  email: string;
-  password: string;
-  contactPhone: string;
-  hospitalName: string;
-  tenantType: 'CLINIC' | 'HOSPITAL';
-  planCode: string;
+  contactName: string; email: string; password: string; contactPhone: string;
+  hospitalName: string; tenantType: 'CLINIC' | 'HOSPITAL'; planCode: string;
 }
 
 export function SignupPage() {
@@ -43,18 +35,15 @@ export function SignupPage() {
   const plans = usePublicPlans();
   const signup = useSignup();
   const verify = useVerifySignature();
-
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
 
-  const { register, handleSubmit, setValue, formState: { isSubmitting } } = useForm<FormValues>({
-    defaultValues: {
-      contactName: '', email: '', password: '', contactPhone: '',
-      hospitalName: '', tenantType: 'CLINIC', planCode: '',
-    },
+  const { register, handleSubmit, setValue, watch, formState: { isSubmitting } } = useForm<FormValues>({
+    defaultValues: { contactName: '', email: '', password: '', contactPhone: '', hospitalName: '', tenantType: 'CLINIC', planCode: '' },
   });
 
-  // Preselect plan from ?plan=CODE and default to first if empty
+  const selectedPlan = watch('planCode');
+
   useEffect(() => {
     const q = params.get('plan');
     if (q) setValue('planCode', q);
@@ -62,11 +51,8 @@ export function SignupPage() {
   }, [params, plans.data, setValue]);
 
   async function onSubmit(values: FormValues) {
-    setError(null);
-    setProcessing(true);
-
+    setError(null); setProcessing(true);
     try {
-      // 1. Create signup + Razorpay order
       const res = await signup.mutateAsync({
         email: values.email,
         password: values.password,
@@ -75,53 +61,38 @@ export function SignupPage() {
         hospitalName: values.hospitalName,
         tenantType: values.tenantType,
         planCode: values.planCode,
-      });
+      } as any);
 
-      // 2. Load Razorpay checkout
       const ok = await loadRazorpay();
-      if (!ok || !window.Razorpay) {
-        setError('Failed to load Razorpay. Check your internet and try again.');
-        setProcessing(false);
-        return;
+      if (!ok || !(window as any).Razorpay) {
+        setError('Failed to load Razorpay. Check your connection and try again.');
+        setProcessing(false); return;
       }
 
-      // 3. Open checkout
-      const rzp = new window.Razorpay({
-        key: res.razorpayKeyId,
-        amount: res.amount,
-        currency: res.currency,
-        name: 'Medical SaaS',
-        description: `${res.plan.name} subscription`,
+      const rzp = new (window as any).Razorpay({
+        key: res.razorpayKeyId, amount: res.amount, currency: res.currency,
+        name: 'Medical SaaS', description: `${res.plan.name} subscription`,
         order_id: res.orderId,
         prefill: { name: values.contactName, email: values.email, contact: values.contactPhone },
-        theme: { color: '#2563eb' },
-        handler: async (response) => {
+        theme: { color: '#3b5bff' },
+        handler: async (response: any) => {
           try {
             await verify.mutateAsync({
               orderId: response.razorpay_order_id,
               paymentId: response.razorpay_payment_id,
               signature: response.razorpay_signature,
             });
-            // Redirect to success page — it polls for provisioning
             navigate(`/signup/success?signupId=${res.signupId}`, { replace: true });
           } catch (e: any) {
-            const msg = e instanceof ApiError ? e.message : 'Signature verification failed';
-            setError(msg);
+            setError(e instanceof ApiError ? e.message : 'Signature verification failed');
             setProcessing(false);
           }
         },
-        modal: {
-          ondismiss: () => {
-            setProcessing(false);
-            setError('Payment was cancelled. You can try again.');
-          },
-        },
+        modal: { ondismiss: () => { setProcessing(false); setError('Payment was cancelled.'); } },
       });
-
       rzp.open();
     } catch (e: any) {
-      const msg = e instanceof ApiError ? e.message : (e?.message ?? 'Signup failed');
-      setError(msg);
+      setError(e instanceof ApiError ? e.message : (e?.message ?? 'Signup failed'));
       setProcessing(false);
     }
   }
@@ -131,91 +102,86 @@ export function SignupPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <Link to="/pricing" className="flex items-center gap-2">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3.5 md:px-6">
+          <Link to="/pricing" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-              <Activity size={18} />
+              <Activity size={16} />
             </div>
-            <span className="font-semibold text-slate-900">Medical SaaS</span>
+            <span className="font-semibold text-slate-900">MedSaaS</span>
           </Link>
-          <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-            Sign in
-          </Link>
+          <Link to="/login" className="text-sm font-medium text-slate-600 hover:text-slate-900">Sign in</Link>
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl px-6 py-10">
+      <main className="mx-auto max-w-xl px-4 py-8 md:px-6 md:py-12">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-slate-900">Create your account</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Pick a plan, pay securely via Razorpay, and your hospital workspace is created automatically.
+            Pick a plan, pay securely, and your hospital workspace is created automatically.
           </p>
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-card md:p-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && <Alert tone="error">{error}</Alert>}
 
-            <Select label="Plan *" {...register('planCode', { required: true })}>
-              <option value="">- select a plan -</option>
-              {plans.data?.map((p) => (
-                <option key={p.id} value={p.code}>
-                  {p.name} - Rs.{(p.price_paise / 100).toFixed(0)}/{p.billing_cycle === 'MONTHLY' ? 'mo' : 'yr'}
-                </option>
-              ))}
-            </Select>
+            {/* Plan picker as cards */}
+            <div>
+              <label className="mb-2 block text-xs font-medium text-slate-600">Plan</label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {plans.data?.map((p) => {
+                  const active = selectedPlan === p.code;
+                  return (
+                    <button
+                      type="button"
+                      key={p.id}
+                      onClick={() => setValue('planCode', p.code)}
+                      className={`rounded-lg border p-3 text-left transition-all ${
+                        active ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500/20' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-slate-900">{p.name}</span>
+                        {active && <span className="h-4 w-4 rounded-full bg-brand-500 ring-4 ring-brand-500/20" />}
+                      </div>
+                      <p className="mt-1 font-mono text-2xs text-slate-500">
+                        ₹{(p.price_paise / 100).toFixed(0)}/{p.billing_cycle === 'MONTHLY' ? 'mo' : 'yr'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-            <Select label="Organization type *" {...register('tenantType', { required: true })}>
-              <option value="CLINIC">Clinic</option>
-              <option value="HOSPITAL">Hospital</option>
-            </Select>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select label="Organization type" {...register('tenantType', { required: true })}>
+                <option value="CLINIC">Clinic</option>
+                <option value="HOSPITAL">Hospital</option>
+              </Select>
+              <Input label="Organization name" placeholder="Demo Hospital" {...register('hospitalName', { required: true })} />
+            </div>
 
-            <Input
-              label="Organization name *"
-              placeholder="Demo Hospital"
-              {...register('hospitalName', { required: true })}
-            />
+            <div className="h-px bg-slate-100" />
 
-            <hr className="my-2 border-slate-100" />
+            <Input label="Your full name" placeholder="Dr. Anita Rao" {...register('contactName', { required: true })} />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input label="Email" type="email" placeholder="you@example.com" {...register('email', { required: true })} />
+              <Input label="Password" type="password" placeholder="At least 8 characters" {...register('password', { required: true, minLength: 8 })} />
+            </div>
+            <Input label="Phone (optional)" placeholder="9876543210" {...register('contactPhone')} />
 
-            <Input
-              label="Your full name *"
-              placeholder="Dr. Anita Rao"
-              {...register('contactName', { required: true })}
-            />
-            <Input
-              label="Email *"
-              type="email"
-              placeholder="you@example.com"
-              {...register('email', { required: true })}
-            />
-            <Input
-              label="Password *"
-              type="password"
-              placeholder="At least 8 characters"
-              {...register('password', { required: true, minLength: 8 })}
-            />
-            <Input
-              label="Phone (optional)"
-              placeholder="9876543210"
-              {...register('contactPhone')}
-            />
-
-            <Button type="submit" className="w-full" loading={busy}>
+            <Button type="submit" className="w-full" size="lg" loading={busy}>
               Continue to payment
             </Button>
-
             <p className="text-center text-xs text-slate-500">
-              By continuing, you agree to our terms. You will be charged the plan amount via Razorpay.
+              You will be charged the plan amount via Razorpay. Cancel anytime.
             </p>
           </form>
         </div>
 
         <p className="mt-6 text-center text-sm text-slate-500">
           Already have an account?{' '}
-          <Link to="/login" className="font-medium text-brand-600 hover:underline">
-            Sign in
-          </Link>
+          <Link to="/login" className="font-medium text-brand-600 hover:text-brand-700">Sign in</Link>
         </p>
       </main>
     </div>

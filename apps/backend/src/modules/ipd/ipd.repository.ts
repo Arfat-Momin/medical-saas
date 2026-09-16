@@ -78,19 +78,20 @@ export const ipdRepository = {
     if (e1) throw e1;
     if (!adm) return null;
 
-    const { data: bed } = await client.from('locations').select('*').eq('id', adm.bed_id).maybeSingle();
+    const { data: bed } = await client.from('locations').select('*')
+      .eq('tenant_id', tenantId).eq('id', adm.bed_id).maybeSingle();
 
     const { data: transfers } = await client.from('bed_transfers').select('*, from_bed:from_bed_id(name), to_bed:to_bed_id(name), by:transferred_by(full_name)')
-      .eq('admission_id', id).order('transferred_at', { ascending: false });
+      .eq('tenant_id', tenantId).eq('admission_id', id).order('transferred_at', { ascending: false });
 
     const { data: notes } = await client.from('nursing_notes').select('*, by:recorded_by(full_name)')
-      .eq('admission_id', id).order('recorded_at', { ascending: false });
+      .eq('tenant_id', tenantId).eq('admission_id', id).order('recorded_at', { ascending: false });
 
     const { data: rounds } = await client.from('doctor_rounds').select('*, doctor:doctor_id(full_name)')
-      .eq('admission_id', id).order('round_at', { ascending: false });
+      .eq('tenant_id', tenantId).eq('admission_id', id).order('round_at', { ascending: false });
 
     const { data: mar } = await client.from('mar_records').select('*, by:administered_by(full_name)')
-      .eq('admission_id', id).order('scheduled_at', { ascending: true });
+      .eq('tenant_id', tenantId).eq('admission_id', id).order('scheduled_at', { ascending: true });
 
     return { ...adm, bed, transfers: transfers ?? [], nursing_notes: notes ?? [], rounds: rounds ?? [], mar: mar ?? [] };
   },

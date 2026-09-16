@@ -1,7 +1,8 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { signupSchema, verifySignatureSchema } from './subscriptions.validators.js';
 import { subscriptionsService } from './subscriptions.service.js';
+import { signupLimiter, signupEmailLimiter } from '../../middleware/rateLimit.js';
 
 export const subscriptionsRouter = Router();
 
@@ -12,6 +13,8 @@ subscriptionsRouter.get('/plans',
 );
 
 subscriptionsRouter.post('/signup',
+  signupLimiter,
+  signupEmailLimiter,
   asyncHandler(async (req, res) => {
     const input = signupSchema.parse(req.body);
     res.status(201).json(await subscriptionsService.createSignup(input));

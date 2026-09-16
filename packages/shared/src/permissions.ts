@@ -38,7 +38,7 @@ export const PERMISSIONS = {
   BILLING_MANAGE: 'billing:manage',
   BILLING_REFUND: 'billing:refund',
 
-  // Platform (Super Admin only)
+  // Platform (Super Admin only — never assignable to a tenant role)
   PLATFORM_TENANT_MANAGE: 'platform:tenant:manage',
   PLATFORM_PLAN_MANAGE: 'platform:plan:manage',
   PLATFORM_SUBSCRIPTION_MANAGE: 'platform:subscription:manage',
@@ -46,15 +46,39 @@ export const PERMISSIONS = {
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
+/**
+ * Permissions that must NEVER appear on a tenant-scoped role.
+ * Used by the roles validator to reject escalation attempts.
+ */
+export const PLATFORM_ONLY_PERMISSIONS: ReadonlySet<string> = new Set([
+  PERMISSIONS.PLATFORM_TENANT_MANAGE,
+  PERMISSIONS.PLATFORM_PLAN_MANAGE,
+  PERMISSIONS.PLATFORM_SUBSCRIPTION_MANAGE,
+]);
+
 import type { RoleCode } from './roles';
 
-/** Default permission sets — Hospital Admin can adjust module visibility per role. */
-export const DEFAULT_ROLE_PERMISSIONS: Record<RoleCode, Permission[]> = {
+/**
+ * SEED_ROLE_PERMISSIONS — SEED DATA ONLY.
+ *
+ * This map exists for ONE purpose: to populate `public.roles.permissions`
+ * when a new tenant is provisioned, and to backfill existing tenants
+ * whose roles still have NULL. It is consumed by the provisioning SQL
+ * migration, NOT by any runtime code path.
+ *
+ * The source of truth at runtime is the DATABASE. The hospital admin
+ * assigns and edits permissions through the Roles page; `authenticate`
+ * reads whatever is stored in `roles.permissions`.
+ *
+ * If you ever want to change the recommended default for a role, change
+ * the SQL migration — not this file at runtime.
+ */
+export const SEED_ROLE_PERMISSIONS: Record<RoleCode, Permission[]> = {
   SUPER_ADMIN: [
     PERMISSIONS.PLATFORM_TENANT_MANAGE,
     PERMISSIONS.PLATFORM_PLAN_MANAGE,
     PERMISSIONS.PLATFORM_SUBSCRIPTION_MANAGE,
-    // NOTE: deliberately NO hospital-scoped permission.
+    // Deliberately no hospital-scoped permission.
   ],
   HOSPITAL_ADMIN: [
     PERMISSIONS.ORG_MANAGE, PERMISSIONS.BRANCH_MANAGE, PERMISSIONS.DEPARTMENT_MANAGE,
@@ -99,6 +123,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleCode, Permission[]> = {
   ],
   ACCOUNTANT: [
     PERMISSIONS.PATIENT_READ,
+    PERMISSIONS.APPOINTMENT_READ,
+    PERMISSIONS.CONSULTATION_READ,
+    PERMISSIONS.IPD_READ,
+    PERMISSIONS.PHARMACY_READ,
+    PERMISSIONS.LAB_READ,
     PERMISSIONS.BILLING_READ, PERMISSIONS.BILLING_MANAGE, PERMISSIONS.BILLING_REFUND,
   ],
 };
+
+/**
+ * @deprecated Use SEED_ROLE_PERMISSIONS. Alias kept so existing
+ * imports don't break during the migration to DB-only permissions.
+ */
+export const DEFAULT_ROLE_PERMISSIONS = SEED_ROLE_PERMISSIONS;

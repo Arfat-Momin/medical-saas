@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { useInvoices, useCreateInvoice, useBillableItems } from '@/hooks/useBilling';
+import { useInvoices, useCreateInvoice } from '@/hooks/useBilling';
 import { usePatients } from '@/hooks/usePatients';
 import { usePermissions } from '@/hooks/useAuth';
 import { PERMISSIONS } from '@medical/shared';
@@ -40,7 +40,6 @@ export function InvoicesPage() {
   const list = useInvoices({ status: status || undefined, page, pageSize: 20 });
 
   const patients = usePatients({ page: 1, pageSize: 200 });
-  const items = useBillableItems({ page: 1, pageSize: 200 });
   const create = useCreateInvoice();
 
   const [open, setOpen] = useState(false);
@@ -57,18 +56,7 @@ export function InvoicesPage() {
     setLines([{ ...newLine }]); setError(null);
   }
 
-  function pickBillableItem(idx: number, billableId: string) {
-    const b = items.data?.rows.find((x) => x.id === billableId);
-    if (!b) return;
-    setLines(lines.map((line, j) => j === idx ? {
-      ...line,
-      itemType: b.category === 'CONSULTATION' ? 'CONSULTATION' : b.category === 'PROCEDURE' ? 'PROCEDURE' : 'MANUAL',
-      description: b.name,
-      unitPrice: String(b.price),
-      taxRate: String(b.tax_rate),
-    } : line));
-  }
-
+  
   function updateLine(i: number, patch: Partial<LineItem>) {
     setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   }
@@ -148,7 +136,7 @@ export function InvoicesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {list.data.rows.map((inv) => (
+                {list.data.rows.map((inv: any) => (
                   <tr key={inv.id} className="hover:bg-slate-50">
                     <td className="px-5 py-3 font-mono text-xs text-brand-700">{inv.invoice_no}</td>
                     <td className="px-5 py-3">
@@ -206,14 +194,7 @@ export function InvoicesPage() {
                 <div key={i} className="rounded-md border border-slate-200 bg-slate-50/40 p-3">
                   {/* Row 1 - identity */}
                   <div className="grid grid-cols-12 gap-3">
-                    <div className="col-span-12 md:col-span-5">
-                      <Select label="From catalog" onChange={(e) => pickBillableItem(i, e.target.value)}>
-                        <option value="">- pick or type below -</option>
-                        {items.data?.rows.map((b) => (
-                          <option key={b.id} value={b.id}>{b.name} (Rs.{b.price})</option>
-                        ))}
-                      </Select>
-                    </div>
+                    
                     <div className="col-span-11 md:col-span-6">
                       <Input
                         label="Description"

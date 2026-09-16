@@ -1,6 +1,8 @@
 import { supabaseForUser } from '../../config/supabase.js';
 import { appointmentsRepository } from './appointments.repository.js';
+import { billingRepository } from '../billing/billing.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
+import { assertNoConflict } from '../../utils/conflict.js';
 import { audit } from '../../middleware/audit.js';
 import type { AuthContext } from '@medical/shared';
 import type { CreateAppointmentInput, ListAppointmentsQuery } from './appointments.validators.js';
@@ -9,7 +11,31 @@ export const appointmentsService = {
   async list(auth: AuthContext, token: string, query: ListAppointmentsQuery) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const client = supabaseForUser(token);
-    return appointmentsRepository.list(client, auth.tenantId, query);
+    const result = await appointmentsRepository.list(client, auth.tenantId, query);
+
+    // Hydrate each appointment with its DOCTOR invoice (doc-XXXX-XXXXX) if the
+    // encounter was completed. doctor_invoice_no is null otherwise.
+    const apptIds = result.rows.map((r: any) => r.id);
+    const encounterByAppt = await billingRepository.findEncountersByAppointments(
+      client, auth.tenantId, apptIds,
+    );
+    const encounterIds = Object.values(encounterByAppt);
+    const invoices = await billingRepository.findInvoicesBySource(
+      client, auth.tenantId, 'DOCTOR', encounterIds,
+    );
+
+    const rows = result.rows.map((r: any) => {
+      const encId = encounterByAppt[r.id];
+      const inv = encId ? invoices[encId] : null;
+      return {
+        ...r,
+        doctor_invoice: inv
+          ? { id: inv.id, invoice_no: inv.invoice_no, total_amount: inv.total_amount, status: inv.status }
+          : null,
+      };
+    });
+
+    return { ...result, rows };
   },
 
   async today(auth: AuthContext, token: string, date: string) {
@@ -28,6 +54,39 @@ export const appointmentsService = {
     const appt = await appointmentsRepository.findById(client, auth.tenantId, id);
     if (!appt) throw NotFound('Appointment not found');
     return appt;
+  },
+
+  /**
+   * Bulk hydration: given a list of appointment server-ids, return a map
+   * appointment_id -> { id, invoice_no, total_amount, status } for the
+   * DOCTOR invoice of the associated encounter. Used by the frontend
+   * Appointments page to render the "doc-*" badge without an N+1 fetch.
+   */
+  async doctorInvoicesByAppointments(
+    auth: AuthContext,
+    token: string,
+    appointmentIds: string[],
+  ): Promise<Record<string, { id: string; invoice_no: string; total_amount: number; status: string } | null>> {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const unique = Array.from(new Set(appointmentIds.filter(Boolean)));
+    if (unique.length === 0) return {};
+
+    const client = supabaseForUser(token);
+
+    const encounterByAppt = await billingRepository.findEncountersByAppointments(
+      client, auth.tenantId, unique,
+    );
+    const encounterIds = Object.values(encounterByAppt);
+    const invoices = await billingRepository.findInvoicesBySource(
+      client, auth.tenantId, 'DOCTOR', encounterIds,
+    );
+
+    const out: Record<string, { id: string; invoice_no: string; total_amount: number; status: string } | null> = {};
+    for (const apptId of unique) {
+      const encId = encounterByAppt[apptId];
+      out[apptId] = encId ? (invoices[encId] ?? null) : null;
+    }
+    return out;
   },
 
   async create(auth: AuthContext, token: string, input: CreateAppointmentInput) {
@@ -134,12 +193,14 @@ export const appointmentsService = {
     return encounter;
   },
 
-  async updateStatus(auth: AuthContext, token: string, id: string, status: string) {
+  async updateStatus(auth: AuthContext, token: string, id: string, status: string, req_expectedUpdatedAt?: string) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const client = supabaseForUser(token);
 
     const before = await appointmentsRepository.findById(client, auth.tenantId, id);
     if (!before) throw NotFound('Appointment not found');
+
+    assertNoConflict(req_expectedUpdatedAt, before.updated_at, before);
 
     const after = await appointmentsRepository.update(client, auth.tenantId, id, { status });
 

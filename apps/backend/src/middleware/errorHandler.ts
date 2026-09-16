@@ -21,9 +21,28 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     });
   }
 
-  logger.error({ err, requestId: req.id }, 'Unhandled error');
+  const errorObj = err as any;
+  logger.error(
+    {
+      err,
+      message: errorObj?.message,
+      code: errorObj?.code,
+      detail: errorObj?.detail,
+      hint: errorObj?.hint,
+      stack: errorObj?.stack?.split('\n').slice(0, 5),
+      requestId: req.id,
+    },
+    'Unhandled error',
+  );
   return res.status(500).json({
-    error: { code: 'INTERNAL', message: 'Internal server error',
-             ...(isProd ? {} : { details: (err as Error)?.message }) },
+    error: {
+      code: 'INTERNAL',
+      message: errorObj?.message ?? 'Internal server error',
+      ...(isProd ? {} : {
+        details: errorObj?.detail ?? errorObj?.hint ?? undefined,
+        internalCode: errorObj?.code ?? undefined,
+        stack: errorObj?.stack?.split('\n').slice(0, 3),
+      }),
+    },
   });
 };

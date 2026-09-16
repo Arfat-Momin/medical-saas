@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Printer } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -13,12 +13,15 @@ import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { useMedicines, useCreateMedicine, useUpdateMedicine } from '@/hooks/usePharmacy';
 import type { Medicine } from '@/repositories/pharmacy.repository';
+import { PrintPreviewModal } from '@/components/PrintPreviewModal';
+import { BarcodePrintSheet } from '@/components/print/BarcodePrintSheet';
+import { useOrganization } from '@/hooks/useOrganization';
 
 const CATEGORIES = ['Tablet','Capsule','Syrup','Injection','Ointment','Drops','Inhaler','Other'];
 const UNITS = ['tab','cap','ml','vial','sachet','tube','bottle'];
 
 const emptyForm = {
-  name: '', code: '', genericName: '', manufacturer: '', category: 'Tablet',
+  name: '', code: '', barcode: '', genericName: '', manufacturer: '', category: 'Tablet',
   unit: 'tab', hsnCode: '', gstRate: '12', reorderLevel: '10',
 };
 
@@ -32,6 +35,8 @@ export function MedicinesPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Medicine | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  const organization = useOrganization();
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<any>({
     defaultValues: emptyForm,
@@ -43,7 +48,7 @@ export function MedicinesPage() {
   function openEdit(m: Medicine) {
     setEditing(m);
     reset({
-      name: m.name, code: m.code ?? '', genericName: m.generic_name ?? '',
+      name: m.name, code: m.code ?? '', barcode: (m as any).barcode ?? '', genericName: m.generic_name ?? '',
       manufacturer: m.manufacturer ?? '', category: m.category ?? 'Tablet',
       unit: m.unit ?? 'tab', hsnCode: m.hsn_code ?? '',
       gstRate: String(m.gst_rate ?? '12'), reorderLevel: String(m.reorder_level),
@@ -55,6 +60,7 @@ export function MedicinesPage() {
     setError(null);
     const payload = {
       name: values.name, code: values.code || null,
+      barcode: values.barcode || null,
       genericName: values.genericName || null, manufacturer: values.manufacturer || null,
       category: values.category || null, unit: values.unit || null,
       hsnCode: values.hsnCode || null,
@@ -75,7 +81,18 @@ export function MedicinesPage() {
       <PageHeader
         title="Medicines"
         subtitle="Medicine master list"
-        action={<Button onClick={openCreate}><Plus size={16} /> New medicine</Button>}
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setPrintOpen(true)}
+              disabled={!list.data?.rows.length}
+            >
+              <Printer size={16} /> Print barcodes
+            </Button>
+            <Button onClick={openCreate}><Plus size={16} /> New medicine</Button>
+          </div>
+        }
       />
 
       <div className="mb-4 max-w-md">
@@ -98,6 +115,7 @@ export function MedicinesPage() {
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3">Barcode</th>
                   <th className="px-5 py-3">Generic</th>
                   <th className="px-5 py-3">Category</th>
                   <th className="px-5 py-3">Unit</th>
@@ -110,6 +128,7 @@ export function MedicinesPage() {
                 {list.data.rows.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50">
                     <td className="px-5 py-3 font-medium text-slate-900">{m.name}</td>
+                    <td className="px-5 py-3 font-mono text-xs text-slate-600">{(m as any).barcode ?? '-'}</td>
                     <td className="px-5 py-3 text-slate-600">{m.generic_name ?? '-'}</td>
                     <td className="px-5 py-3 text-slate-600">{m.category ? <Badge tone="blue">{m.category}</Badge> : '-'}</td>
                     <td className="px-5 py-3 text-slate-600">{m.unit ?? '-'}</td>
@@ -141,6 +160,11 @@ export function MedicinesPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Input label="Name *" placeholder="Paracetamol 500mg" {...register('name', { required: true })} />
             <Input label="Code / SKU" {...register('code')} />
+            <Input
+              label="Barcode"
+              placeholder="Leave blank to auto-generate (e.g. MED-000123)"
+              {...register('barcode')}
+            />
             <Input label="Generic name" {...register('genericName')} />
             <Input label="Manufacturer" {...register('manufacturer')} />
             <Select label="Category" {...register('category')}>
@@ -155,6 +179,24 @@ export function MedicinesPage() {
           </div>
         </form>
       </Modal>
+
+      {printOpen && (
+        <PrintPreviewModal
+          open={printOpen}
+          onClose={() => setPrintOpen(false)}
+          title="Medicine Barcodes"
+        >
+          <BarcodePrintSheet
+            organizationName={organization.data?.name}
+            medicines={(list.data?.rows ?? []).map((m) => ({
+              id: m.id,
+              name: m.name,
+              barcode: (m as any).barcode ?? null,
+              generic_name: m.generic_name,
+            }))}
+          />
+        </PrintPreviewModal>
+      )}
     </>
   );
 }

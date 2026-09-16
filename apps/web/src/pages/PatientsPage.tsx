@@ -1,31 +1,30 @@
-import { useState } from 'react';
-import { Search, UserPlus, AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, UserPlus, AlertTriangle, Users } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
-import { Spinner } from '@/components/ui/Spinner';
+import { ListCard } from '@/components/ui/ListCard';
+import { CardListSkeleton, TableSkeleton } from '@/components/ui/Skeleton';
 import { usePatients, useCreatePatient } from '@/hooks/usePatients';
 import { usePermissions } from '@/hooks/useAuth';
-import { patientsRepository, type DuplicateMatch } from '@/repositories/patients.repository';
+import { useAuthStore } from '@/stores/auth.store';
+import { patientsRepository, type Patient, type DuplicateMatch } from '@/repositories/patients.repository';
+import { triggerSyncNow } from '@/sync/listeners';
 import { PERMISSIONS } from '@medical/shared';
+import { EditPatientModal } from '@/pages/patients/EditPatientModal';
+import { Avatar } from '@/components/ui/Avatar';
 
 interface FormValues {
-  fullName: string;
-  dateOfBirth: string;
-  gender: '' | 'MALE' | 'FEMALE' | 'OTHER';
-  mobile: string;
-  address: string;
-  bloodGroup: string;
-  allergies: string;
-  medicalHistory: string;
-  emergencyContact: string;
+  fullName: string; dateOfBirth: string; gender: '' | 'MALE' | 'FEMALE' | 'OTHER';
+  mobile: string; address: string; bloodGroup: string;
+  allergies: string; medicalHistory: string; emergencyContact: string;
 }
 
 const emptyForm: FormValues = {
@@ -35,163 +34,226 @@ const emptyForm: FormValues = {
 
 const BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
 
+function ageFromDOB(dob: string): number {
+  const diff = Date.now() - new Date(dob).getTime();
+  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+}
+
 export function PatientsPage() {
   const { can } = usePermissions();
+  const navigate = useNavigate();
+  const roles = useAuthStore((s) => s.roles);
+  const isHospitalAdmin = roles.includes('HOSPITAL_ADMIN');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const patients = usePatients({ page, pageSize: 10, search });
   const create = useCreatePatient();
-
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [pendingValues, setPendingValues] = useState<FormValues | null>(null);
+  const [editTarget, setEditTarget] = useState<Patient | null>(null);
 
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({
-    defaultValues: emptyForm,
-  });
-
+  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({ defaultValues: emptyForm });
   const canCreate = can(PERMISSIONS.PATIENT_CREATE);
 
-  async function onSubmit(values: FormValues) {
-    setError(null);
-    setDuplicates(null);
+  useEffect(() => { void triggerSyncNow().catch(() => {}); }, []);
 
+  async function onSubmit(values: FormValues) {
+    setError(null); setDuplicates(null);
     try {
-      // Step 1 - check for duplicates first
       const dup = await patientsRepository.checkDuplicate({
         mobile: values.mobile || undefined,
         fullName: values.fullName,
         dateOfBirth: values.dateOfBirth || undefined,
       });
-
-      if (dup.hasDuplicates) {
-        setDuplicates(dup.matches);
-        setPendingValues(values);
-        return;
-      }
-
+      if (dup.hasDuplicates) { setDuplicates(dup.matches); setPendingValues(values); return; }
       await commitCreate(values, false);
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to register patient');
-    }
+    } catch (e: any) { setError(e?.message ?? 'Failed to register patient'); }
   }
 
   async function commitCreate(values: FormValues, skipDuplicateCheck: boolean) {
     try {
       await create.mutateAsync({
-        fullName: values.fullName,
-        dateOfBirth: values.dateOfBirth || null,
-        gender: values.gender || null,
-        mobile: values.mobile || null,
-        address: values.address || null,
-        bloodGroup: values.bloodGroup || null,
-        allergies: values.allergies || null,
-        medicalHistory: values.medicalHistory || null,
-        emergencyContact: values.emergencyContact || null,
-        skipDuplicateCheck,
+        fullName: values.fullName, dateOfBirth: values.dateOfBirth || null,
+        gender: values.gender || null, mobile: values.mobile || null,
+        address: values.address || null, bloodGroup: values.bloodGroup || null,
+        allergies: values.allergies || null, medicalHistory: values.medicalHistory || null,
+        emergencyContact: values.emergencyContact || null, skipDuplicateCheck,
       });
-      reset(emptyForm);
-      setOpen(false);
-      setDuplicates(null);
-      setPendingValues(null);
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to register patient');
-    }
+      reset(emptyForm); setOpen(false); setDuplicates(null); setPendingValues(null);
+    } catch (e: any) { setError(e?.message ?? 'Failed to register patient'); }
   }
 
   function closeModal() {
-    setOpen(false);
-    reset(emptyForm);
-    setError(null);
-    setDuplicates(null);
-    setPendingValues(null);
+    setOpen(false); reset(emptyForm); setError(null); setDuplicates(null); setPendingValues(null);
   }
 
   const totalPages = patients.data ? Math.max(1, Math.ceil(patients.data.total / (patients.data.pageSize || 10))) : 1;
+  const rows = patients.data?.rows ?? [];
 
   return (
     <>
       <PageHeader
         title="Patients"
-        subtitle="Registry of all patients in your organization"
+        subtitle={`${patients.data?.total ?? 0} patient${(patients.data?.total ?? 0) === 1 ? '' : 's'} in your registry`}
         action={
           canCreate && (
-            <Button onClick={() => setOpen(true)}>
-              <UserPlus size={16} /> Register patient
+            <Button onClick={() => setOpen(true)} size="md" leftIcon={<UserPlus size={16} />}>
+              <span className="hidden sm:inline">Register patient</span>
+              <span className="sm:hidden">New</span>
             </Button>
           )
         }
       />
 
-      <div className="mb-4 max-w-md">
+      <div className="mb-5 max-w-md">
         <Input
           placeholder="Search by name, mobile or UHID"
-          leftIcon={<Search size={14} />}
+          leftIcon={<Search size={16} />}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
         />
       </div>
 
-      {patients.isLoading && <div className="flex justify-center py-12"><Spinner size={28} /></div>}
+      {patients.isLoading && (
+        <>
+          <div className="hidden md:block"><TableSkeleton rows={6} cols={5} /></div>
+          <div className="md:hidden"><CardListSkeleton rows={4} /></div>
+        </>
+      )}
+
       {patients.isError && <Alert tone="error">Failed to load patients.</Alert>}
 
-      {patients.data?.rows.length === 0 && (
+      {!patients.isLoading && rows.length === 0 && (
         <EmptyState
+          icon={<Users size={22} />}
           title="No patients yet"
-          description="Register your first patient to get started."
-          action={canCreate && <Button onClick={() => setOpen(true)}><UserPlus size={16} /> Register patient</Button>}
+          description={search ? `No matches for "${search}".` : 'Register your first patient to get started.'}
+          action={canCreate && !search && (
+            <Button onClick={() => setOpen(true)} leftIcon={<UserPlus size={16} />}>Register patient</Button>
+          )}
         />
       )}
 
-      {patients.data && patients.data.rows.length > 0 && (
-        <>
-          <Card className="overflow-hidden">
+      {/* Mobile — card list */}
+      {!patients.isLoading && rows.length > 0 && (
+        <div className="space-y-3 md:hidden">
+          {rows.map((p) => (
+            <ListCard
+              key={p.id}
+              onClick={() => navigate(`/patients/${p.id}`)}
+              actions={
+                <>
+                  <Button size="sm" variant="secondary" onClick={() => navigate(`/patients/${p.id}`)}>View</Button>
+                  {isHospitalAdmin && <Button size="sm" onClick={() => setEditTarget(p)}>Edit</Button>}
+                </>
+              }
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-base font-semibold text-slate-900">{p.full_name}</p>
+                    {p.blood_group && (
+                      <span className="shrink-0 rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-2xs font-bold text-red-700">
+                        {p.blood_group}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 font-mono text-xs text-brand-700">{p.uhid}</p>
+                </div>
+                <Avatar name={p.full_name} size={36} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
+                {p.mobile && <div><span className="text-slate-400">Mobile </span>{p.mobile}</div>}
+                {(p.date_of_birth || p.gender) && (
+                  <div className="col-span-2">
+                    <span className="text-slate-400">Age / Gender </span>
+                    {p.date_of_birth ? `${ageFromDOB(p.date_of_birth)}y` : '-'}
+                    {p.gender ? ` · ${p.gender.charAt(0)}` : ''}
+                  </div>
+                )}
+              </div>
+            </ListCard>
+          ))}
+        </div>
+      )}
+
+      {/* Desktop — table */}
+      {!patients.isLoading && rows.length > 0 && (
+        <div className="hidden md:block">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
+              <table className="w-full text-base">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-2xs font-medium uppercase tracking-wider text-slate-500">
                     <th className="px-5 py-3">UHID</th>
                     <th className="px-5 py-3">Name</th>
                     <th className="px-5 py-3">Age / Gender</th>
                     <th className="px-5 py-3">Mobile</th>
                     <th className="px-5 py-3">Blood</th>
-                    <th className="px-5 py-3">Registered</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {patients.data.rows.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="px-5 py-3 font-mono text-xs text-brand-700">{p.uhid}</td>
-                      <td className="px-5 py-3 font-medium text-slate-900">{p.full_name}</td>
-                      <td className="px-5 py-3 text-slate-600">
+                  {rows.map((p) => (
+                    <tr key={p.id} className="transition-colors hover:bg-slate-50/60">
+                      <td className="px-5 py-3.5 font-mono text-xs text-brand-700">{p.uhid}</td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={p.full_name} size={32} />
+                          <span className="font-medium text-slate-900">{p.full_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-600">
                         {p.date_of_birth ? `${ageFromDOB(p.date_of_birth)}y` : '-'}
-                        {p.gender ? ` | ${p.gender.charAt(0)}` : ''}
+                        {p.gender ? ` · ${p.gender.charAt(0)}` : ''}
                       </td>
-                      <td className="px-5 py-3 text-slate-600">{p.mobile ?? '-'}</td>
-                      <td className="px-5 py-3">
-                        {p.blood_group ? <Badge tone="red">{p.blood_group}</Badge> : <span className="text-slate-400">-</span>}
+                      <td className="px-5 py-3.5 text-slate-600">{p.mobile ?? '-'}</td>
+                      <td className="px-5 py-3.5">
+                        {p.blood_group ? <Badge tone="red">{p.blood_group}</Badge> : <span className="text-slate-300">—</span>}
                       </td>
-                      <td className="px-5 py-3 text-xs text-slate-500">
-                        {new Date(p.created_at).toLocaleDateString()}
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => navigate(`/patients/${p.id}`)}
+                            className="rounded-md px-3 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                          >
+                            View
+                          </button>
+                          {isHospitalAdmin && (
+                            <button
+                              onClick={() => setEditTarget(p)}
+                              className="rounded-md px-3 py-1 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-50"
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </Card>
-
-          <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
-            <span>{patients.data.total} patient{patients.data.total === 1 ? '' : 's'} | page {patients.data.page} of {totalPages}</span>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-            </div>
           </div>
-        </>
+        </div>
       )}
 
+      {/* Pagination */}
+      {patients.data && patients.data.total > 10 && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+          <span className="tabular-nums">
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+            <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Register modal */}
       <Modal
         open={open}
         onClose={closeModal}
@@ -208,73 +270,62 @@ export function PatientsPage() {
           {error && <Alert tone="error">{error}</Alert>}
 
           {duplicates && pendingValues && (
-            <Alert tone="error">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 font-semibold">
-                  <AlertTriangle size={16} />
-                  Possible duplicate patient found
-                </div>
-                <ul className="space-y-1 text-xs">
-                  {duplicates.map((d) => (
-                    <li key={d.id}>
-                      <span className="font-mono text-brand-700">{d.uhid}</span> - {d.full_name}
-                      {d.mobile ? ` | ${d.mobile}` : ''}
-                      <span className="ml-1 text-slate-500">({d.reason === 'same_mobile' ? 'same mobile' : 'same name & DOB'})</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      setDuplicates(null);
-                      setPendingValues(null);
-                    }}
-                  >
-                    Review details
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="danger"
-                    onClick={() => commitCreate(pendingValues, true)}
-                  >
-                    Register anyway
-                  </Button>
-                </div>
+            <Alert tone="warning">
+              <div className="flex items-center gap-2 font-semibold">
+                <AlertTriangle size={15} /> Possible duplicate found
+              </div>
+              <ul className="mt-2 space-y-1 text-xs">
+                {duplicates.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-brand-700">{d.uhid}</span>
+                    <span>·</span>
+                    <span>{d.full_name}</span>
+                    {d.mobile && <><span>·</span><span>{d.mobile}</span></>}
+                    <span className="text-slate-500">
+                      ({d.reason === 'same_mobile' ? 'same mobile' : 'same name & DOB'})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={() => { setDuplicates(null); setPendingValues(null); }}>
+                  Review details
+                </Button>
+                <Button type="button" size="sm" variant="danger" onClick={() => commitCreate(pendingValues, true)}>
+                  Register anyway
+                </Button>
               </div>
             </Alert>
           )}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input label="Full name *" placeholder="Rahul Sharma" {...register('fullName', { required: true })} />
             <Input label="Date of birth" type="date" {...register('dateOfBirth')} />
             <Select label="Gender" {...register('gender')}>
-              <option value="">-</option>
+              <option value="">—</option>
               <option value="MALE">Male</option>
               <option value="FEMALE">Female</option>
               <option value="OTHER">Other</option>
             </Select>
             <Input label="Mobile" placeholder="9876543210" {...register('mobile')} />
             <Select label="Blood group" {...register('bloodGroup')}>
-              <option value="">-</option>
+              <option value="">—</option>
               {BLOOD_GROUPS.map((b) => <option key={b} value={b}>{b}</option>)}
             </Select>
             <Input label="Emergency contact" placeholder="Name & phone" {...register('emergencyContact')} />
-            <Input label="Address" className="md:col-span-2" {...register('address')} />
-            <Input label="Allergies" className="md:col-span-2" placeholder="Penicillin, peanuts, ..." {...register('allergies')} />
-            <Input label="Medical history" className="md:col-span-2" placeholder="Diabetes, hypertension, ..." {...register('medicalHistory')} />
+            <Input label="Address" className="sm:col-span-2" {...register('address')} />
+            <Input label="Allergies" className="sm:col-span-2" placeholder="Penicillin, peanuts…" {...register('allergies')} />
+            <Input label="Medical history" className="sm:col-span-2" placeholder="Diabetes, hypertension…" {...register('medicalHistory')} />
           </div>
         </form>
       </Modal>
+
+      <EditPatientModal
+        open={editTarget !== null}
+        patient={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSaved={() => patients.refetch()}
+      />
     </>
   );
-}
-
-function ageFromDOB(dob: string): number {
-  const d = new Date(dob);
-  const diff = Date.now() - d.getTime();
-  return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
 }

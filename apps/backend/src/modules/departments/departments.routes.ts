@@ -1,4 +1,4 @@
-﻿import { Router } from 'express';
+import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { getAccessToken } from '../../middleware/auth.js';
@@ -12,8 +12,11 @@ import { departmentsService } from './departments.service.js';
 
 export const departmentsRouter = Router();
 
+// SECURITY: departments are only used by the admin-facing Departments
+// page. Gate reads with the same permission that gates writes.
 departmentsRouter.get(
   '/',
+  requirePermission(PERMISSIONS.DEPARTMENT_MANAGE),
   asyncHandler(async (req, res) => {
     const { branchId, activeOnly } = listDepartmentsQuerySchema.parse(req.query);
     res.json(await departmentsService.list(req.auth!, getAccessToken(req), branchId, activeOnly));

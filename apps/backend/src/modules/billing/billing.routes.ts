@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { requirePermission } from '../../middleware/permissions.js';
 import { getAccessToken } from '../../middleware/auth.js';
@@ -64,6 +65,23 @@ billingRouter.post('/invoices/from-encounter',
   }),
 );
 
+// ---- Sub-invoices for a combined invoice ----
+billingRouter.get('/invoices/:id/sub-invoices',
+  requirePermission(PERMISSIONS.BILLING_READ),
+  asyncHandler(async (req, res) => {
+    res.json(await billingService.listSubInvoices(req.auth!, getAccessToken(req), req.params.id!));
+  }),
+);
+
+// ---- Update discount on an invoice ----
+billingRouter.patch('/invoices/:id/discount',
+  requirePermission(PERMISSIONS.BILLING_MANAGE),
+  asyncHandler(async (req, res) => {
+    const schema = z.object({ discount: z.coerce.number().min(0).max(1_000_000) });
+    const { discount } = schema.parse(req.body);
+    res.json(await billingService.updateDiscount(req.auth!, getAccessToken(req), req.params.id!, discount));
+  }),
+);
 // ---- Payments ----
 billingRouter.post('/invoices/:id/payments',
   requirePermission(PERMISSIONS.BILLING_MANAGE),
@@ -79,5 +97,28 @@ billingRouter.post('/invoices/:id/refunds',
   asyncHandler(async (req, res) => {
     const input = refundPaymentSchema.parse(req.body);
     res.status(201).json(await billingService.refundPayment(req.auth!, getAccessToken(req), req.params.id!, input));
+  }),
+);
+
+// ---- Per-department invoice views ----
+billingRouter.get('/doctor-invoices',
+  requirePermission(PERMISSIONS.BILLING_READ),
+  asyncHandler(async (req, res) => {
+    const q = listInvoicesQuerySchema.parse(req.query);
+    res.json(await billingService.listDoctorInvoices(req.auth!, getAccessToken(req), q));
+  }),
+);
+billingRouter.get('/pharmacy-invoices',
+  requirePermission(PERMISSIONS.PHARMACY_READ),
+  asyncHandler(async (req, res) => {
+    const q = listInvoicesQuerySchema.parse(req.query);
+    res.json(await billingService.listPharmacyInvoices(req.auth!, getAccessToken(req), q));
+  }),
+);
+billingRouter.get('/lab-invoices',
+  requirePermission(PERMISSIONS.LAB_READ),
+  asyncHandler(async (req, res) => {
+    const q = listInvoicesQuerySchema.parse(req.query);
+    res.json(await billingService.listLabInvoices(req.auth!, getAccessToken(req), q));
   }),
 );

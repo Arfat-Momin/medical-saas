@@ -3,12 +3,31 @@ import { supabaseAdmin, supabaseForUser } from '../../config/supabase.js';
 import { usersRepository } from './users.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
 import { audit } from '../../middleware/audit.js';
+import { assertWithinPlanLimits } from '../../utils/entitlements.js';
 import type { AuthContext } from '@medical/shared';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.validators.js';
 
 function generateTempPassword(): string {
-    // 16 chars, guaranteed to include letters+digits+special
     return randomBytes(10).toString('base64url').slice(0, 12) + 'aA1!';
+}
+
+/**
+ * Supabase Auth admin.createUser returns an error when the email
+ * already exists. Depending on the SDK version this surfaces as
+ * "A user with this email address has already been registered" or
+ * a `email_exists` code. Match on either so we handle both.
+ */
+function isEmailAlreadyRegistered(err: any): boolean {
+    if (!err) return false;
+    const code  = String(err.code  ?? '').toLowerCase();
+    const msg   = String(err.message ?? '').toLowerCase();
+    return (
+        code === 'email_exists' ||
+        code === 'user_already_exists' ||
+        msg.includes('already been registered') ||
+        msg.includes('already registered') ||
+        msg.includes('already exists')
+    );
 }
 
 export const usersService = {
@@ -28,10 +47,31 @@ export const usersService = {
         return { profile, memberships };
     },
 
+    /**
+     * Invite a user to the CALLER'S tenant.
+     *
+     * Two paths:
+     *   A) Email is brand new to the platform.
+     *      - Create Supabase Auth user with a temp password.
+     *      - Insert a `users` profile row.
+     *      - attach_user_to_tenant(role, branch).
+     *      - Return { existingUser: false, tempPassword }.
+     *
+     *   B) Email already has a Supabase Auth account (possibly under
+     *      another tenant).
+     *      - Do NOT create a new auth user or profile.
+     *      - Do NOT reveal "this email exists" as an error.
+     *      - attach_user_to_tenant(role, branch) on the existing id.
+     *      - Return { existingUser: true, tempPassword: null }.
+     *
+     * Rollback only deletes the auth user when WE created it.
+     */
     async invite(auth: AuthContext, token: string, input: InviteUserInput) {
         if (!auth.tenantId) throw NotFound('No tenant context');
 
-        // Look up the role within this tenant (admin client - no RLS gap)
+        await assertWithinPlanLimits(auth.tenantId, 'users');
+
+        // Resolve role inside this tenant.
         const { data: role, error: roleErr } = await supabaseAdmin
             .from('roles')
             .select('id, code, name')
@@ -41,11 +81,22 @@ export const usersService = {
         if (roleErr) throw roleErr;
         if (!role) throw BadRequest(`Role "${input.roleCode}" not found in this tenant`);
 
-        // Reject duplicates
-        const existing = await usersRepository.findByEmail(supabaseAdmin, input.email);
-        if (existing) throw Conflict('A user with this email already exists');
+        // Does a platform profile already exist for this email?
+        const existingProfile = await usersRepository.findByEmail(supabaseAdmin, input.email);
 
-        // Create auth user (admin API - cannot be inside a DB transaction)
+        // If so, is the user already a member of THIS tenant?
+        if (existingProfile) {
+            const existingMembership = await usersRepository.findMembership(
+                supabaseAdmin,
+                auth.tenantId,
+                existingProfile.id,
+            );
+            if (existingMembership && existingMembership.is_active) {
+                throw Conflict('This user is already a member of this hospital');
+            }
+        }
+
+        // ---------- Path A: brand new email ----------
         const tempPassword = generateTempPassword();
         const { data: authUserData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
             email: input.email,
@@ -53,22 +104,40 @@ export const usersService = {
             email_confirm: true,
             user_metadata: { full_name: input.fullName },
         });
-        if (authErr || !authUserData.user) {
-            throw BadRequest(authErr?.message ?? 'Failed to create auth user');
-        }
-        const userId = authUserData.user.id;
 
-        try {
-            // Insert profile
+        let userId: string;
+        let createdNewAuthUser = false;
+
+        if (!authErr && authUserData?.user) {
+            userId = authUserData.user.id;
+            createdNewAuthUser = true;
+
             const { error: profileErr } = await supabaseAdmin.from('users').insert({
                 id: userId,
                 email: input.email,
                 full_name: input.fullName,
                 phone: input.phone ?? null,
             });
-            if (profileErr) throw profileErr;
+            if (profileErr) {
+                await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => { });
+                throw profileErr;
+            }
+        } else if (isEmailAlreadyRegistered(authErr)) {
+            // ---------- Path B: existing auth account ----------
+            if (!existingProfile) {
+                // Auth exists but no public.users profile. Data inconsistency.
+                // Refuse so we never orphan a membership.
+                throw Conflict(
+                    'An account with this email exists but has no profile. Contact platform support.',
+                );
+            }
+            userId = existingProfile.id;
+        } else {
+            throw BadRequest(authErr?.message ?? 'Failed to create auth user');
+        }
 
-            // Attach to tenant via RPC (atomic - validates role + branch ownership)
+        // ---------- Attach to this tenant ----------
+        try {
             const { error: attachErr } = await supabaseAdmin.rpc('attach_user_to_tenant', {
                 p_user_id: userId,
                 p_tenant_id: auth.tenantId,
@@ -87,6 +156,7 @@ export const usersService = {
                     fullName: input.fullName,
                     roleCode: role.code,
                     branchId: input.branchId ?? null,
+                    existingUser: !createdNewAuthUser,
                 },
             });
 
@@ -96,11 +166,15 @@ export const usersService = {
                 fullName: input.fullName,
                 roleCode: role.code,
                 branchId: input.branchId ?? null,
-                tempPassword, // return ONCE - Hospital Admin shares it securely
+                // Nullable: only present when we provisioned a new account.
+                tempPassword: createdNewAuthUser ? tempPassword : null,
+                existingUser: !createdNewAuthUser,
             };
         } catch (err) {
-            // Best-effort rollback of the auth user so retries don't collide
-            await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => { });
+            // Roll back only what WE created.
+            if (createdNewAuthUser) {
+                await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => { });
+            }
             throw err;
         }
     },
@@ -108,30 +182,37 @@ export const usersService = {
     async update(auth: AuthContext, token: string, userId: string, patch: UpdateUserInput) {
         if (!auth.tenantId) throw NotFound('No tenant context');
 
-        // Ensure the target user belongs to this tenant
-        const { data: membership } = await supabaseAdmin
-            .from('memberships')
-            .select('id')
-            .eq('tenant_id', auth.tenantId)
-            .eq('user_id', userId)
-            .maybeSingle();
+        const membership = await usersRepository.findMembership(supabaseAdmin, auth.tenantId, userId);
         if (!membership) throw NotFound('User is not part of this tenant');
 
-        const dbPatch: Record<string, unknown> = {};
-        if (patch.fullName !== undefined) dbPatch.full_name = patch.fullName;
-        if (patch.phone !== undefined) dbPatch.phone = patch.phone;
-        if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
+        const profilePatch: Record<string, unknown> = {};
+        if (patch.fullName !== undefined)         profilePatch.full_name = patch.fullName;
+        if (patch.phone !== undefined)            profilePatch.phone = patch.phone;
+        if (patch.consultationFee !== undefined)  profilePatch.consultation_fee = patch.consultationFee;
 
-        if (Object.keys(dbPatch).length === 0) {
+        const hasMembershipChange = patch.isActive !== undefined;
+        const nextMembershipActive: boolean = hasMembershipChange
+            ? (patch.isActive as boolean)
+            : (membership.is_active as boolean);
+
+        if (Object.keys(profilePatch).length === 0 && !hasMembershipChange) {
             return { message: 'Nothing to update' };
         }
 
         const before = await usersRepository.findProfileById(supabaseAdmin, userId);
-        const after = await usersRepository.updateProfile(supabaseAdmin, userId, dbPatch);
 
-        // If user disabled  deactivate memberships in this tenant too
-        if (patch.isActive === false) {
-            await usersRepository.deactivateMemberships(supabaseAdmin, auth.tenantId, userId);
+        let afterProfile: Record<string, unknown> | null = null;
+        if (Object.keys(profilePatch).length > 0) {
+            afterProfile = await usersRepository.updateProfile(supabaseAdmin, userId, profilePatch);
+        }
+
+        if (hasMembershipChange) {
+            await usersRepository.setMembershipActive(
+                supabaseAdmin,
+                auth.tenantId,
+                userId,
+                patch.isActive as boolean,
+            );
         }
 
         await audit({
@@ -139,10 +220,24 @@ export const usersService = {
             action: 'USER_UPDATED',
             entity: 'users',
             entityId: userId,
-            before,
-            after,
+            before: {
+                full_name: before?.full_name ?? null,
+                phone: before?.phone ?? null,
+                consultation_fee: before?.consultation_fee ?? null,
+                membership_active: membership.is_active,
+            },
+            after: {
+                full_name: afterProfile?.full_name ?? before?.full_name ?? null,
+                phone: afterProfile?.phone ?? before?.phone ?? null,
+                consultation_fee: afterProfile?.consultation_fee ?? before?.consultation_fee ?? null,
+                membership_active: nextMembershipActive,
+            },
         });
 
-        return after;
+        const base = afterProfile ?? before ?? {};
+        return {
+            ...base,
+            membership_active: nextMembershipActive,
+        };
     },
 };

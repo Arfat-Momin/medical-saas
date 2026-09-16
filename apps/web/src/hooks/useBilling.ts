@@ -1,4 +1,4 @@
-﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { billingRepository as repo, type CreateInvoiceInput } from '@/repositories/billing.repository';
 
 const ITEMS = ['billing', 'items'];
@@ -25,7 +25,17 @@ export function useInvoices(params: { patientId?: string; status?: string; from?
   return useQuery({ queryKey: [...INVOICES, params], queryFn: () => repo.listInvoices(params) });
 }
 export function useInvoice(id: string | undefined) {
-  return useQuery({ queryKey: [...INVOICES, id], queryFn: () => repo.getInvoice(id!), enabled: Boolean(id) });
+  return useQuery({
+    queryKey: [...INVOICES, id],
+    queryFn: () => repo.getInvoice(id!),
+    enabled: Boolean(id),
+    // Invoices can be mutated server-side (auto-invoice on consultation,
+    // pharmacy dispense, lab order). Always re-fetch when the page mounts
+    // or the user returns to the tab so the UI never shows stale items.
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
 }
 export function useCreateInvoice() {
   const qc = useQueryClient();
@@ -51,6 +61,7 @@ export function useRecordPayment(invoiceId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: INVOICES });
       qc.invalidateQueries({ queryKey: [...INVOICES, invoiceId] });
+      qc.invalidateQueries({ queryKey: ['billing', 'sub-invoices', invoiceId] });
     },
   });
 }
@@ -62,6 +73,55 @@ export function useRefundPayment(invoiceId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: INVOICES });
       qc.invalidateQueries({ queryKey: [...INVOICES, invoiceId] });
+      qc.invalidateQueries({ queryKey: ['billing', 'sub-invoices', invoiceId] });
+    },
+  });
+}
+
+// ---- Per-department invoice hooks ----
+export function useDoctorInvoices(params: { page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ['billing', 'doctor-invoices', params],
+    queryFn: () => import('@/repositories/billing.repository').then(m => m.listDoctorInvoices(params)),
+  });
+}
+export function usePharmacyInvoices(params: { page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ['billing', 'pharmacy-invoices', params],
+    queryFn: () => import('@/repositories/billing.repository').then(m => m.listPharmacyInvoices(params)),
+  });
+}
+export function useLabInvoices(params: { page?: number; pageSize?: number }) {
+  return useQuery({
+    queryKey: ['billing', 'lab-invoices', params],
+    queryFn: () => import('@/repositories/billing.repository').then(m => m.listLabInvoices(params)),
+  });
+}
+// ---- Sub-invoices list (Source Invoices panel) ----
+export function useSubInvoices(parentInvoiceId: string | undefined) {
+  return useQuery({
+    queryKey: ['billing', 'sub-invoices', parentInvoiceId],
+    queryFn: async () => {
+      const mod = await import('@/repositories/billing.repository');
+      return mod.billingRepositoryExtra.listSubInvoices(parentInvoiceId!);
+    },
+    enabled: Boolean(parentInvoiceId),
+    staleTime: 5_000,
+  });
+}
+
+// ---- Update discount on the combined invoice ----
+export function useUpdateDiscount(invoiceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (discount: number) => {
+      const mod = await import('@/repositories/billing.repository');
+      return mod.billingRepositoryExtra.updateDiscount(invoiceId, discount);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: INVOICES });
+      qc.invalidateQueries({ queryKey: [...INVOICES, invoiceId] });
+      qc.invalidateQueries({ queryKey: ['billing', 'sub-invoices', invoiceId] });
     },
   });
 }

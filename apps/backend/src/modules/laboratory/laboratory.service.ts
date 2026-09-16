@@ -1,7 +1,10 @@
 import { supabaseForUser } from '../../config/supabase.js';
 import { laboratoryRepository as repo } from './laboratory.repository.js';
+import { billingRepository } from '../billing/billing.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
 import { audit } from '../../middleware/audit.js';
+import { billingService } from '../billing/billing.service.js';
+import { logger } from '../../config/logger.js';
 import type { AuthContext } from '@medical/shared';
 import type {
   CreateLabTestInput, UpdateLabTestInput, CreateLabOrderInput,
@@ -59,7 +62,22 @@ export const laboratoryService = {
   // ORDERS
   async listOrders(auth: AuthContext, token: string, q: ListLabOrdersQuery) {
     if (!auth.tenantId) throw NotFound('No tenant context');
-    return repo.listOrders(supabaseForUser(token), auth.tenantId, q);
+    const client = supabaseForUser(token);
+    const result = await repo.listOrders(client, auth.tenantId, q);
+    const orderIds = result.rows.map((r: any) => r.id);
+    const invoices = await billingRepository.findInvoicesBySource(
+      client, auth.tenantId, 'LAB', orderIds,
+    );
+    const rows = result.rows.map((r: any) => {
+      const inv = invoices[r.id];
+      return {
+        ...r,
+        lab_invoice: inv
+          ? { id: inv.id, invoice_no: inv.invoice_no, total_amount: inv.total_amount, status: inv.status }
+          : null,
+      };
+    });
+    return { ...result, rows };
   },
 
   async getOrder(auth: AuthContext, token: string, id: string) {
@@ -100,6 +118,14 @@ export const laboratoryService = {
       entityId: result.orderId,
       after: { totalAmount: result.totalAmount, testCount: input.testIds.length },
     });
+
+    if (input.encounterId) {
+      try {
+        await billingService.syncEncounterInvoice(auth, token, input.encounterId);
+      } catch (e) {
+        logger.warn({ encounterId: input.encounterId, err: e }, 'Invoice sync after lab order failed');
+      }
+    }
 
     return result;
   },

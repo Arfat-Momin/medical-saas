@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { patientsRepository, type CreatePatientInput } from '@/repositories/patients.repository';
+import { useAuthStore } from '@/stores/auth.store';
+import {
+  patientsRepository,
+  type CreatePatientInput,
+  type ListPatientsResponse,
+  type Patient,
+} from '@/repositories/patients.repository';
 
 const KEY = ['patients'];
 
@@ -10,15 +16,18 @@ export interface UsePatientsParams {
   branchId?: string;
 }
 
-export function usePatients(params: UsePatientsParams) {
-  return useQuery({
-    queryKey: [...KEY, params],
+export function usePatients(params: UsePatientsParams = {}) {
+  const tenantId = useAuthStore((s) => s.tenantId);
+  return useQuery<ListPatientsResponse>({
+    queryKey: [...KEY, tenantId, params],
+    enabled: !!tenantId,
     queryFn: () => patientsRepository.list(params),
+    staleTime: 5_000,
   });
 }
 
 export function usePatient(id: string | undefined) {
-  return useQuery({
+  return useQuery<Patient>({
     queryKey: [...KEY, id],
     queryFn: () => patientsRepository.getById(id!),
     enabled: Boolean(id),

@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { requirePermission } from '../../middleware/permissions.js';
+import { requirePermission, requireRole } from '../../middleware/permissions.js';
 import { getAccessToken } from '../../middleware/auth.js';
 import { PERMISSIONS } from '@medical/shared';
-import { saveEncounterSchema, createWalkInSchema, listEncountersQuerySchema } from './opd.validators.js';
+import {
+  saveEncounterSchema,
+  createWalkInSchema,
+  listEncountersQuerySchema,
+  adminEditPrescriptionSchema,
+} from './opd.validators.js';
 import { opdService } from './opd.service.js';
 
 export const opdRouter = Router();
@@ -34,11 +39,29 @@ opdRouter.get(
   }),
 );
 
+async function saveEncounterHandler(req: any, res: any) {
+  const input = saveEncounterSchema.parse(req.body);
+  res.json(await opdService.save(req.auth!, getAccessToken(req), req.params.id!, input));
+}
+
 opdRouter.put(
   '/encounters/:id',
   requirePermission(PERMISSIONS.CONSULTATION_WRITE),
+  asyncHandler(saveEncounterHandler),
+);
+
+// PATCH alias so both work
+opdRouter.patch(
+  '/encounters/:id',
+  requirePermission(PERMISSIONS.CONSULTATION_WRITE),
+  asyncHandler(saveEncounterHandler),
+);
+// Admin-only: edit prescription after completion
+opdRouter.put(
+  '/encounters/:id/prescription',
+  requireRole('HOSPITAL_ADMIN'),
   asyncHandler(async (req, res) => {
-    const input = saveEncounterSchema.parse(req.body);
-    res.json(await opdService.save(req.auth!, getAccessToken(req), req.params.id!, input));
+    const input = adminEditPrescriptionSchema.parse(req.body);
+    res.json(await opdService.adminEditPrescription(req.auth!, getAccessToken(req), req.params.id!, input));
   }),
 );
