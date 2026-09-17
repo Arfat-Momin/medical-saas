@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const subscriptionsRepository = {
   async listActivePlans(client: SupabaseClient) {
@@ -22,7 +22,7 @@ export const subscriptionsRepository = {
 
   async findByEmailPending(client: SupabaseClient, email: string) {
     const { data, error } = await client.from('pending_signups')
-      .select('*').eq('email', email).in('status', ['PENDING', 'PAID']).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      .select('*').eq('email', email).in('status', ['PENDING','PAID']).maybeSingle();
     if (error) throw error;
     return data;
   },

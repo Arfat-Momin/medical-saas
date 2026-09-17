@@ -58,32 +58,18 @@ export const subscriptionsService = {
       }
       authUserId = user.id;
     } else {
-      // Password signup.
-      // If a public.users profile already exists for this email, this is
-      // a retry after a failed/expired prior signup — reuse the existing
-      // auth user instead of erroring with "already registered".
-      // (The pending-signup guard above already rejected active PENDING/PAID rows.)
-      const { data: existingProfile } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('email', input.email)
-        .maybeSingle();
-
-      if (existingProfile) {
-        authUserId = existingProfile.id;
-      } else {
-        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-          email: input.email,
-          password: input.password!,
-          email_confirm: true,
-          user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
-        });
-        if (authErr || !authUser.user) {
-          throw BadRequest(authErr?.message ?? 'Failed to create user account');
-        }
-        authUserId = authUser.user.id;
-        createdNewAuthUser = true;
+      // Password signup: create a fresh auth user.
+      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: input.email,
+        password: input.password!,
+        email_confirm: true,
+        user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
+      });
+      if (authErr || !authUser.user) {
+        throw BadRequest(authErr?.message ?? 'Failed to create user account');
       }
+      authUserId = authUser.user.id;
+      createdNewAuthUser = true;
     }
 
     try {
