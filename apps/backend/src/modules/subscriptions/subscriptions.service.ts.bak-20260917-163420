@@ -155,29 +155,12 @@ export const subscriptionsService = {
       return { alreadyProvisioned: true, tenantId: signup.provisioned_tenant_id };
     }
 
-    let result;
-    try {
-      result = await repo.provisionSignup(supabaseAdmin, {
-        signupId: signup.id,
-        paymentId: input.paymentId,
-        signature: input.signature,
-        webhook: { source: 'frontend', orderId: input.orderId, paymentId: input.paymentId },
-      });
-    } catch (e: any) {
-      // Race with the Razorpay webhook: the other caller may have
-      // provisioned the tenant while we were processing. Re-check and,
-      // if so, return their result instead of a phantom error.
-      const dup = e?.code === '23505'
-        || String(e?.message ?? '').toLowerCase().includes('duplicate key');
-      if (dup) {
-        const refreshed = await repo.findById(supabaseAdmin, signup.id);
-        if (refreshed?.status === 'PROVISIONED' && refreshed.provisioned_tenant_id) {
-          logger.info({ signupId: signup.id }, 'verify-signature lost race; using winner result');
-          return { alreadyProvisioned: true, tenantId: refreshed.provisioned_tenant_id };
-        }
-      }
-      throw e;
-    }
+    const result = await repo.provisionSignup(supabaseAdmin, {
+      signupId: signup.id,
+      paymentId: input.paymentId,
+      signature: input.signature,
+      webhook: { source: 'frontend', orderId: input.orderId, paymentId: input.paymentId },
+    });
 
     logger.info({ signupId: signup.id, tenantId: result.tenantId }, 'Provisioned via frontend verification');
     return result;
@@ -222,26 +205,12 @@ export const subscriptionsService = {
         return { ok: true, handled: false, reason: 'signup_not_found' };
       }
 
-      let result;
-      try {
-        result = await repo.provisionSignup(supabaseAdmin, {
-          signupId: signup.id,
-          paymentId,
-          signature,
-          webhook: payload,
-        });
-      } catch (e: any) {
-        const dup = e?.code === '23505'
-          || String(e?.message ?? '').toLowerCase().includes('duplicate key');
-        if (dup) {
-          const refreshed = await repo.findById(supabaseAdmin, signup.id);
-          if (refreshed?.status === 'PROVISIONED' && refreshed.provisioned_tenant_id) {
-            logger.info({ signupId: signup.id }, 'webhook lost race; using winner result');
-            return { ok: true, handled: true, tenantId: refreshed.provisioned_tenant_id };
-          }
-        }
-        throw e;
-      }
+      const result = await repo.provisionSignup(supabaseAdmin, {
+        signupId: signup.id,
+        paymentId,
+        signature,
+        webhook: payload,
+      });
 
       logger.info({ signupId: signup.id, tenantId: result.tenantId, already: result.alreadyProvisioned }, 'Webhook provisioned tenant');
       return { ok: true, handled: true, tenantId: result.tenantId };
