@@ -1,0 +1,12 @@
+{
+    "buildCommand": "npx --yes pnpm@9 install --frozen-lockfile && npx --yes pnpm@9 --filter @medical/web build",
+    "outputDirectory": "apps/web/dist",
+    "installCommand": "echo skipped",
+    "framework": null,
+    "rewrites": [
+        {
+            "source": "/((?!api|assets|icons|favicon|manifest|sw\\.js|registerSW\\.js|workbox-).*)",
+            "destination": "/index.html"
+        }
+    ]
+}
