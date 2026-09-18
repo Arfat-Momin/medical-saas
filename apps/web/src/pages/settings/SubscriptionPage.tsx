@@ -85,7 +85,7 @@ export function SubscriptionPage() {
   }
 
   const { subscription, plan, daysRemaining, isExpired, payments } = current.data;
-  const isFreeTier = subscription.isFreeTier;
+  const isFreeTier = subscription?.isFreeTier ?? false;
 
   async function handleRenew(planId: string) {
     setError(null);
@@ -135,6 +135,57 @@ export function SubscriptionPage() {
   }
 
   const renewablePlans = (plans.data ?? []).filter((p: any) => !p.is_free && p.is_renewable && p.is_active);
+
+  // ---- No-subscription empty state ---------------------------------------
+  // A tenant with no subscription row is a legitimate state (the plan was
+  // never provisioned). The backend allows /subscriptions/* on this path,
+  // so the user can pick a plan and pay without being locked out.
+  if (!subscription) {
+    return (
+      <div className="space-y-4">
+        <Alert tone="warning">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <strong>No active subscription</strong>
+              <p className="mt-0.5 text-xs">
+                Your organization doesn't have a plan yet. Choose a plan below to activate one.
+              </p>
+            </div>
+          </div>
+        </Alert>
+
+        <Card>
+          <CardHeader
+            title="Choose a plan"
+            subtitle="Select a plan to activate your subscription"
+          />
+          <CardBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {renewablePlans.length === 0 && (
+              <p className="col-span-full py-6 text-center text-sm text-slate-500">
+                No plans are available right now. Please contact support.
+              </p>
+            )}
+            {renewablePlans.map((p: any) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => handleRenew(p.id)}
+                disabled={busy}
+                className="rounded-lg border border-slate-200 p-4 text-left transition hover:border-brand-400 hover:bg-brand-50 disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-900">{p.name}</span>
+                  <span className="font-mono text-sm">{money(p.price_paise)}</span>
+                </div>
+                <p className="mt-1 font-mono text-2xs text-slate-500">{p.code}</p>
+              </button>
+            ))}
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -325,3 +376,5 @@ function Limit({ label, value }: { label: string; value: string | number }) {
     </div>
   );
 }
+
+

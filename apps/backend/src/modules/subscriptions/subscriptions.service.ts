@@ -5,6 +5,7 @@ import { subscriptionsRepository as repo } from './subscriptions.repository.js';
 import { requireRazorpay } from './razorpay.client.js';
 import { BadRequest, Conflict, NotFound, Unauthorized } from '../../utils/errors.js';
 import { logger } from '../../config/logger.js';
+import { invalidateTenantStatus } from '../../middleware/tenantContext.js';
 import type { AuthContext } from '@medical/shared';
 import type {
   SignupInput,
@@ -185,6 +186,7 @@ export const subscriptionsService = {
       const endsAt = new Date(Date.now() + plan.trial_days * 24 * 60 * 60 * 1000).toISOString();
       await repo.updateSubscriptionToFreeTrial(supabaseAdmin, result.tenantId, endsAt);
       await repo.deleteDummyPayment(supabaseAdmin, result.tenantId, dummyPaymentId);
+      invalidateTenantStatus(result.tenantId);
 
       logger.info(
         { signupId: signup.id, tenantId: result.tenantId, trialDays: plan.trial_days },
@@ -256,6 +258,7 @@ export const subscriptionsService = {
       throw e;
     }
 
+    invalidateTenantStatus(result.tenantId);
     logger.info({ signupId: signup.id, tenantId: result.tenantId }, 'Provisioned via frontend verification');
     return result;
   },
@@ -264,7 +267,18 @@ export const subscriptionsService = {
     if (!auth.tenantId) throw NotFound('No tenant context');
 
     const sub = await repo.findLatestSubscriptionForTenant(supabaseAdmin, auth.tenantId);
-    if (!sub) throw NotFound('No subscription found');
+
+    // No subscription row yet ? return an empty state instead of 404.
+    // The frontend gate shows the expired / no-plan UI so the user can pay.
+    if (!sub) {
+      return {
+        subscription: null,
+        plan: null,
+        daysRemaining: 0,
+        isExpired: true,
+        payments: [],
+      };
+    }
 
     const endsAt = new Date(sub.ends_at).getTime();
     const now = Date.now();
@@ -407,6 +421,7 @@ export const subscriptionsService = {
     });
 
     await repo.ensureTenantActive(supabaseAdmin, fresh.tenant_id);
+    invalidateTenantStatus(fresh.tenant_id);
 
     logger.info(
       { renewalId: fresh.id, tenantId: fresh.tenant_id, subscriptionId: newSub.id, endsAt },
@@ -500,7 +515,8 @@ export const subscriptionsService = {
         throw e;
       }
 
-      logger.info(
+      invalidateTenantStatus(result.tenantId);
+    logger.info(
         { signupId: signup.id, tenantId: result.tenantId, already: result.alreadyProvisioned },
         'Webhook provisioned tenant',
       );
@@ -539,3 +555,9 @@ export const subscriptionsService = {
     return { ok: true, handled: false, reason: 'unhandled_event:' + event };
   },
 };
+
+
+
+
+
+

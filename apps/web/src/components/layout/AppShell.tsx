@@ -6,6 +6,7 @@ import { MobileDrawer } from './MobileDrawer';
 import { BottomTabBar } from './BottomTabBar';
 import { useMeSync } from '@/hooks/useAuth';
 import { FullPageSpinner } from '@/components/ui/Spinner';
+import { SubscriptionGate } from '@/components/subscription/SubscriptionGate';
 
 export function AppShell() {
   const { isLoading, isError } = useMeSync();
@@ -37,6 +38,20 @@ export function AppShell() {
           zIndex: 0,
         }}
       >
+        <main className="flex-1 overflow-y-auto pb-28 md:pb-0">
+          <div className="mx-auto max-w-[1500px]">
+            <Outlet />
+          </div>
+        </main>
+
+      // ... with:
+        <main className="flex-1 overflow-y-auto pb-28 md:pb-0">
+          <div className="mx-auto max-w-[1500px]">
+            <SubscriptionGate>
+              <Outlet />
+            </SubscriptionGate>
+          </div>
+        </main>
         <div
           className="ambient-float"
           style={{
