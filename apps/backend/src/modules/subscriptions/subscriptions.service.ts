@@ -36,6 +36,35 @@ async function generateUniqueSlug(base: string): Promise<string> {
   throw Conflict('Could not generate a unique hospital slug - try a different name');
 }
 
+async function resolveAuthUserId(input: SignupInput): Promise<{ userId: string; created: boolean }> {
+  if (input.googleAccessToken) {
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(input.googleAccessToken);
+    if (error || !user) throw Unauthorized('Invalid Google session');
+    if ((user.email ?? '').toLowerCase() !== input.email.toLowerCase()) {
+      throw BadRequest('Google email does not match the signup email');
+    }
+    return { userId: user.id, created: false };
+  }
+
+  const { data: existingProfile } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('email', input.email)
+    .maybeSingle();
+  if (existingProfile) return { userId: existingProfile.id, created: false };
+
+  const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+    email: input.email,
+    password: input.password!,
+    email_confirm: true,
+    user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
+  });
+  if (authErr || !authUser.user) {
+    throw BadRequest(authErr?.message ?? 'Failed to create user account');
+  }
+  return { userId: authUser.user.id, created: true };
+}
+
 export const subscriptionsService = {
   async listPublicPlans() {
     return repo.listActivePlans(supabaseAdmin);
@@ -46,13 +75,11 @@ export const subscriptionsService = {
     if (!plan || !plan.is_active) {
       throw NotFound('Plan "' + input.planCode + '" not found or inactive');
     }
+    if (plan.is_free) return this.createFreeSignup(input, plan);
+    return this.createPaidSignup(input, plan);
+  },
 
-    // ===== FREE TIER BRANCH =====
-    if (plan.is_free) {
-      return this.createFreeSignup(input, plan);
-    }
-
-    // ===== EXISTING PAID FLOW (unchanged) =====
+  async createPaidSignup(input: SignupInput, plan: any) {
     const rzp = requireRazorpay();
 
     const baseSlug = input.hospitalSlug ?? slugify(input.hospitalName);
@@ -63,39 +90,7 @@ export const subscriptionsService = {
       throw Conflict('You already have a pending signup. Complete the payment or wait 24h before retrying.');
     }
 
-    let authUserId: string;
-    let createdNewAuthUser = false;
-
-    if (input.googleAccessToken) {
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(input.googleAccessToken);
-      if (error || !user) throw Unauthorized('Invalid Google session');
-      if ((user.email ?? '').toLowerCase() !== input.email.toLowerCase()) {
-        throw BadRequest('Google email does not match the signup email');
-      }
-      authUserId = user.id;
-    } else {
-      const { data: existingProfile } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('email', input.email)
-        .maybeSingle();
-
-      if (existingProfile) {
-        authUserId = existingProfile.id;
-      } else {
-        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-          email: input.email,
-          password: input.password!,
-          email_confirm: true,
-          user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
-        });
-        if (authErr || !authUser.user) {
-          throw BadRequest(authErr?.message ?? 'Failed to create user account');
-        }
-        authUserId = authUser.user.id;
-        createdNewAuthUser = true;
-      }
-    }
+    const { userId: authUserId, created } = await resolveAuthUserId(input);
 
     try {
       const order = await rzp.orders.create({
@@ -131,14 +126,13 @@ export const subscriptionsService = {
         isFree: false,
       };
     } catch (e) {
-      if (createdNewAuthUser) {
+      if (created) {
         await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
       }
       throw e;
     }
   },
 
-  // ===== FREE TIER SIGNUP =====
   async createFreeSignup(input: SignupInput, plan: any) {
     if (!plan.trial_days || plan.trial_days <= 0) {
       throw BadRequest('Free plan is misconfigured (trial_days missing or invalid)');
@@ -157,39 +151,12 @@ export const subscriptionsService = {
       throw Conflict('You already have a pending signup. Complete it first.');
     }
 
-    let authUserId: string;
-    let createdNewAuthUser = false;
+    const { userId: authUserId, created } = await resolveAuthUserId(input);
 
-    if (input.googleAccessToken) {
-      const { data: { user }, error } = await supabaseAdmin.auth.getUser(input.googleAccessToken);
-      if (error || !user) throw Unauthorized('Invalid Google session');
-      if ((user.email ?? '').toLowerCase() !== input.email.toLowerCase()) {
-        throw BadRequest('Google email does not match the signup email');
-      }
-      authUserId = user.id;
-    } else {
-      const { data: existingProfile } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('email', input.email)
-        .maybeSingle();
-
-      if (existingProfile) {
-        authUserId = existingProfile.id;
-      } else {
-        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-          email: input.email,
-          password: input.password!,
-          email_confirm: true,
-          user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
-        });
-        if (authErr || !authUser.user) {
-          throw BadRequest(authErr?.message ?? 'Failed to create user account');
-        }
-        authUserId = authUser.user.id;
-        createdNewAuthUser = true;
-      }
-    }
+    // Synthetic order id so any RLS/policy that requires a non-null razorpay_order_id
+    // still passes for free-tier signups.
+    const syntheticOrderId =
+      'free_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 
     try {
       const signup = await repo.createSignup(supabaseAdmin, {
@@ -201,12 +168,11 @@ export const subscriptionsService = {
         hospital_slug: slug,
         tenant_type: input.tenantType,
         plan_id: plan.id,
-        razorpay_order_id: null,
+        razorpay_order_id: syntheticOrderId,
         status: 'PENDING',
         subscription_type: 'FREE',
       });
 
-      // Provision via existing RPC with synthetic payment info.
       const dummyPaymentId = 'free_' + signup.id.replace(/-/g, '').slice(0, 12);
 
       const result = await repo.provisionSignup(supabaseAdmin, {
@@ -232,7 +198,7 @@ export const subscriptionsService = {
         tenantId: result.tenantId,
       };
     } catch (e) {
-      if (createdNewAuthUser) {
+      if (created) {
         await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
       }
       throw e;
@@ -294,7 +260,6 @@ export const subscriptionsService = {
     return result;
   },
 
-  // ===== CURRENT SUBSCRIPTION =====
   async getCurrentSubscription(auth: AuthContext) {
     if (!auth.tenantId) throw NotFound('No tenant context');
 
@@ -323,7 +288,6 @@ export const subscriptionsService = {
     };
   },
 
-  // ===== CREATE RENEWAL ORDER =====
   async createRenewal(auth: AuthContext, planId: string) {
     if (!auth.tenantId) throw NotFound('No tenant context');
 
@@ -374,7 +338,6 @@ export const subscriptionsService = {
     };
   },
 
-  // ===== VERIFY RENEWAL =====
   async verifyRenewal(input: VerifyRenewalInput) {
     if (!env.RAZORPAY_KEY_SECRET) throw BadRequest('Razorpay not configured');
 
@@ -394,7 +357,6 @@ export const subscriptionsService = {
     return this.activateRenewal(renewal, input.paymentId);
   },
 
-  // ===== ACTIVATE RENEWAL (internal, also called by webhook) =====
   async activateRenewal(renewal: any, paymentId: string) {
     const fresh = await repo.findPendingRenewalById(supabaseAdmin, renewal.id);
     if (!fresh) throw NotFound('Renewal disappeared');
@@ -495,7 +457,6 @@ export const subscriptionsService = {
         return { ok: true, handled: false, reason: 'missing_ids' };
       }
 
-      // Renewals are checked FIRST
       const renewal = await repo.findPendingRenewalByOrderId(supabaseAdmin, orderId);
       if (renewal) {
         try {
