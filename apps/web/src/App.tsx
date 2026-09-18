@@ -42,6 +42,7 @@ import { StockPage } from '@/pages/pharmacy/StockPage';
 import { PharmacyQueuePage } from '@/pages/pharmacy/PharmacyQueuePage';
 import { PharmacyInvoicesPage } from '@/pages/pharmacy/PharmacyInvoicesPage';
 import { LabInvoicesPage } from '@/pages/laboratory/LabInvoicesPage';
+import { SubscriptionPage } from '@/pages/settings/SubscriptionPage';
 
 
 
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="/ipd/admissions/:admissionId" element={<AdmissionDetailPage />} />
           <Route path="/settings/sessions" element={<SessionsPage />} />
           <Route path="/settings/pricing"  element={<AdminPricingPage />} />
+          <Route path="/settings/subscription" element={<SubscriptionPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

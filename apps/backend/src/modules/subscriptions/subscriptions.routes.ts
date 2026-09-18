@@ -1,18 +1,27 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { signupSchema, verifySignatureSchema } from './subscriptions.validators.js';
+import { authenticate, requireAuth } from '../../middleware/auth.js';
+import { requireTenant } from '../../middleware/tenantContext.js';
+import {
+  signupSchema,
+  verifySignatureSchema,
+  renewSchema,
+  verifyRenewalSchema,
+} from './subscriptions.validators.js';
 import { subscriptionsService } from './subscriptions.service.js';
 import { signupLimiter, signupEmailLimiter } from '../../middleware/rateLimit.js';
 
 export const subscriptionsRouter = Router();
 
-subscriptionsRouter.get('/plans',
+subscriptionsRouter.get(
+  '/plans',
   asyncHandler(async (_req, res) => {
     res.json(await subscriptionsService.listPublicPlans());
   }),
 );
 
-subscriptionsRouter.post('/signup',
+subscriptionsRouter.post(
+  '/signup',
   signupLimiter,
   signupEmailLimiter,
   asyncHandler(async (req, res) => {
@@ -21,15 +30,51 @@ subscriptionsRouter.post('/signup',
   }),
 );
 
-subscriptionsRouter.get('/signup/:id',
+subscriptionsRouter.get(
+  '/signup/:id',
   asyncHandler(async (req, res) => {
     res.json(await subscriptionsService.getSignupStatus(req.params.id!));
   }),
 );
 
-subscriptionsRouter.post('/verify-signature',
+subscriptionsRouter.post(
+  '/verify-signature',
   asyncHandler(async (req, res) => {
     const input = verifySignatureSchema.parse(req.body);
     res.json(await subscriptionsService.verifySignature(input));
+  }),
+);
+
+// ===== Subscription info + renewal (authenticated, tenant-scoped) =====
+
+subscriptionsRouter.get(
+  '/current',
+  authenticate,
+  requireAuth,
+  requireTenant,
+  asyncHandler(async (req, res) => {
+    res.json(await subscriptionsService.getCurrentSubscription(req.auth!));
+  }),
+);
+
+subscriptionsRouter.post(
+  '/renew',
+  authenticate,
+  requireAuth,
+  requireTenant,
+  asyncHandler(async (req, res) => {
+    const { planId } = renewSchema.parse(req.body);
+    res.status(201).json(await subscriptionsService.createRenewal(req.auth!, planId));
+  }),
+);
+
+subscriptionsRouter.post(
+  '/verify-renewal',
+  authenticate,
+  requireAuth,
+  requireTenant,
+  asyncHandler(async (req, res) => {
+    const input = verifyRenewalSchema.parse(req.body);
+    res.json(await subscriptionsService.verifyRenewal(input));
   }),
 );

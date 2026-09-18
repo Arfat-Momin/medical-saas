@@ -23,5 +23,17 @@ export const verifySignatureSchema = z.object({
   signature: z.string().min(1),
 });
 
+export const renewSchema = z.object({
+  planId: z.string().uuid(),
+});
+
+export const verifyRenewalSchema = z.object({
+  renewalId: z.string().uuid(),
+  paymentId: z.string().min(1),
+  signature: z.string().min(1),
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;
 export type VerifySignatureInput = z.infer<typeof verifySignatureSchema>;
+export type RenewInput = z.infer<typeof renewSchema>;
+export type VerifyRenewalInput = z.infer<typeof verifyRenewalSchema>;

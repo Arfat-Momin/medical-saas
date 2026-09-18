@@ -64,6 +64,12 @@ export function SignupPage() {
         planCode: values.planCode,
       } as any);
 
+      // Free tier: no Razorpay ? provision is done server-side; go straight to success
+      if ((res as any).isFree) {
+        navigate(`/signup/success?signupId=${res.signupId}`, { replace: true });
+        return;
+      }
+
       const ok = await loadRazorpay();
       if (!ok || !(window as any).Razorpay) {
         setError('Failed to load Razorpay. Check your connection and try again.');
@@ -146,7 +152,7 @@ export function SignupPage() {
                         {active && <span className="h-4 w-4 rounded-full bg-brand-500 ring-4 ring-brand-500/20" />}
                       </div>
                       <p className="mt-1 font-mono text-2xs text-slate-500">
-                        ₹{(p.price_paise / 100).toFixed(0)}/{p.billing_cycle === 'MONTHLY' ? 'mo' : 'yr'}
+                        ???{(p.price_paise / 100).toFixed(0)}/{p.billing_cycle === 'MONTHLY' ? 'mo' : 'yr'}
                       </p>
                     </button>
                   );

@@ -5,7 +5,12 @@ import { subscriptionsRepository as repo } from './subscriptions.repository.js';
 import { requireRazorpay } from './razorpay.client.js';
 import { BadRequest, Conflict, NotFound, Unauthorized } from '../../utils/errors.js';
 import { logger } from '../../config/logger.js';
-import type { SignupInput, VerifySignatureInput } from './subscriptions.validators.js';
+import type { AuthContext } from '@medical/shared';
+import type {
+  SignupInput,
+  VerifySignatureInput,
+  VerifyRenewalInput,
+} from './subscriptions.validators.js';
 
 function slugify(name: string): string {
   return name
@@ -19,27 +24,39 @@ function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 6);
 }
 
+async function generateUniqueSlug(base: string): Promise<string> {
+  let slug = base;
+  let attempts = 0;
+  while (attempts < 5) {
+    const existing = await repo.findBySlug(supabaseAdmin, slug);
+    if (!existing) return slug;
+    slug = base + '-' + randomSuffix();
+    attempts++;
+  }
+  throw Conflict('Could not generate a unique hospital slug - try a different name');
+}
+
 export const subscriptionsService = {
   async listPublicPlans() {
     return repo.listActivePlans(supabaseAdmin);
   },
 
   async createSignup(input: SignupInput) {
+    const plan = await repo.findPlanByCode(supabaseAdmin, input.planCode);
+    if (!plan || !plan.is_active) {
+      throw NotFound('Plan "' + input.planCode + '" not found or inactive');
+    }
+
+    // ===== FREE TIER BRANCH =====
+    if (plan.is_free) {
+      return this.createFreeSignup(input, plan);
+    }
+
+    // ===== EXISTING PAID FLOW (unchanged) =====
     const rzp = requireRazorpay();
 
-    const plan = await repo.findPlanByCode(supabaseAdmin, input.planCode);
-    if (!plan || !plan.is_active) throw NotFound('Plan "' + input.planCode + '" not found or inactive');
-
     const baseSlug = input.hospitalSlug ?? slugify(input.hospitalName);
-    let slug = baseSlug;
-    let attempts = 0;
-    while (attempts < 5) {
-      const existing = await repo.findBySlug(supabaseAdmin, slug);
-      if (!existing) break;
-      slug = baseSlug + '-' + randomSuffix();
-      attempts++;
-    }
-    if (attempts >= 5) throw Conflict('Could not generate a unique hospital slug - try a different name');
+    const slug = await generateUniqueSlug(baseSlug);
 
     const existing = await repo.findByEmailPending(supabaseAdmin, input.email);
     if (existing) {
@@ -50,7 +67,6 @@ export const subscriptionsService = {
     let createdNewAuthUser = false;
 
     if (input.googleAccessToken) {
-      // Google signup: reuse the existing Supabase auth user.
       const { data: { user }, error } = await supabaseAdmin.auth.getUser(input.googleAccessToken);
       if (error || !user) throw Unauthorized('Invalid Google session');
       if ((user.email ?? '').toLowerCase() !== input.email.toLowerCase()) {
@@ -58,11 +74,6 @@ export const subscriptionsService = {
       }
       authUserId = user.id;
     } else {
-      // Password signup.
-      // If a public.users profile already exists for this email, this is
-      // a retry after a failed/expired prior signup — reuse the existing
-      // auth user instead of erroring with "already registered".
-      // (The pending-signup guard above already rejected active PENDING/PAID rows.)
       const { data: existingProfile } = await supabaseAdmin
         .from('users')
         .select('id')
@@ -105,6 +116,7 @@ export const subscriptionsService = {
         plan_id: plan.id,
         razorpay_order_id: order.id,
         status: 'PENDING',
+        subscription_type: 'PAID',
       });
 
       logger.info({ signupId: signup.id, orderId: order.id, plan: plan.code }, 'Signup created');
@@ -116,6 +128,108 @@ export const subscriptionsService = {
         currency: 'INR',
         plan: { code: plan.code, name: plan.name },
         razorpayKeyId: env.RAZORPAY_KEY_ID,
+        isFree: false,
+      };
+    } catch (e) {
+      if (createdNewAuthUser) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+      }
+      throw e;
+    }
+  },
+
+  // ===== FREE TIER SIGNUP =====
+  async createFreeSignup(input: SignupInput, plan: any) {
+    if (!plan.trial_days || plan.trial_days <= 0) {
+      throw BadRequest('Free plan is misconfigured (trial_days missing or invalid)');
+    }
+
+    const existingFree = await repo.findAnyProvisionedByEmail(supabaseAdmin, input.email);
+    if (existingFree) {
+      throw Conflict('A free trial already exists for this email. Please sign in or choose a paid plan.');
+    }
+
+    const baseSlug = input.hospitalSlug ?? slugify(input.hospitalName);
+    const slug = await generateUniqueSlug(baseSlug);
+
+    const pending = await repo.findByEmailPending(supabaseAdmin, input.email);
+    if (pending) {
+      throw Conflict('You already have a pending signup. Complete it first.');
+    }
+
+    let authUserId: string;
+    let createdNewAuthUser = false;
+
+    if (input.googleAccessToken) {
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(input.googleAccessToken);
+      if (error || !user) throw Unauthorized('Invalid Google session');
+      if ((user.email ?? '').toLowerCase() !== input.email.toLowerCase()) {
+        throw BadRequest('Google email does not match the signup email');
+      }
+      authUserId = user.id;
+    } else {
+      const { data: existingProfile } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('email', input.email)
+        .maybeSingle();
+
+      if (existingProfile) {
+        authUserId = existingProfile.id;
+      } else {
+        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+          email: input.email,
+          password: input.password!,
+          email_confirm: true,
+          user_metadata: { full_name: input.contactName, phone: input.contactPhone ?? null },
+        });
+        if (authErr || !authUser.user) {
+          throw BadRequest(authErr?.message ?? 'Failed to create user account');
+        }
+        authUserId = authUser.user.id;
+        createdNewAuthUser = true;
+      }
+    }
+
+    try {
+      const signup = await repo.createSignup(supabaseAdmin, {
+        auth_user_id: authUserId,
+        email: input.email,
+        contact_name: input.contactName,
+        contact_phone: input.contactPhone ?? null,
+        hospital_name: input.hospitalName,
+        hospital_slug: slug,
+        tenant_type: input.tenantType,
+        plan_id: plan.id,
+        razorpay_order_id: null,
+        status: 'PENDING',
+        subscription_type: 'FREE',
+      });
+
+      // Provision via existing RPC with synthetic payment info.
+      const dummyPaymentId = 'free_' + signup.id.replace(/-/g, '').slice(0, 12);
+
+      const result = await repo.provisionSignup(supabaseAdmin, {
+        signupId: signup.id,
+        paymentId: dummyPaymentId,
+        signature: 'free_tier_no_razorpay',
+        webhook: { source: 'free_tier', planCode: plan.code, trialDays: plan.trial_days },
+      });
+
+      const endsAt = new Date(Date.now() + plan.trial_days * 24 * 60 * 60 * 1000).toISOString();
+      await repo.updateSubscriptionToFreeTrial(supabaseAdmin, result.tenantId, endsAt);
+      await repo.deleteDummyPayment(supabaseAdmin, result.tenantId, dummyPaymentId);
+
+      logger.info(
+        { signupId: signup.id, tenantId: result.tenantId, trialDays: plan.trial_days },
+        'Free trial provisioned',
+      );
+
+      return {
+        signupId: signup.id,
+        isFree: true,
+        alreadyProvisioned: result.alreadyProvisioned,
+        tenantId: result.tenantId,
       };
     } catch (e) {
       if (createdNewAuthUser) {
@@ -135,6 +249,7 @@ export const subscriptionsService = {
       hospitalName: s.hospital_name,
       tenantId: s.provisioned_tenant_id,
       createdAt: s.created_at,
+      subscriptionType: s.subscription_type ?? 'PAID',
     };
   },
 
@@ -164,11 +279,7 @@ export const subscriptionsService = {
         webhook: { source: 'frontend', orderId: input.orderId, paymentId: input.paymentId },
       });
     } catch (e: any) {
-      // Race with the Razorpay webhook: the other caller may have
-      // provisioned the tenant while we were processing. Re-check and,
-      // if so, return their result instead of a phantom error.
-      const dup = e?.code === '23505'
-        || String(e?.message ?? '').toLowerCase().includes('duplicate key');
+      const dup = e?.code === '23505' || String(e?.message ?? '').toLowerCase().includes('duplicate key');
       if (dup) {
         const refreshed = await repo.findById(supabaseAdmin, signup.id);
         if (refreshed?.status === 'PROVISIONED' && refreshed.provisioned_tenant_id) {
@@ -181,6 +292,171 @@ export const subscriptionsService = {
 
     logger.info({ signupId: signup.id, tenantId: result.tenantId }, 'Provisioned via frontend verification');
     return result;
+  },
+
+  // ===== CURRENT SUBSCRIPTION =====
+  async getCurrentSubscription(auth: AuthContext) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+
+    const sub = await repo.findLatestSubscriptionForTenant(supabaseAdmin, auth.tenantId);
+    if (!sub) throw NotFound('No subscription found');
+
+    const endsAt = new Date(sub.ends_at).getTime();
+    const now = Date.now();
+    const daysRemaining = Math.max(0, Math.ceil((endsAt - now) / 86400000));
+
+    const payments = await repo.listRecentPayments(supabaseAdmin, auth.tenantId, 10);
+
+    return {
+      subscription: {
+        id: sub.id,
+        status: sub.status,
+        startsAt: sub.starts_at,
+        endsAt: sub.ends_at,
+        isFreeTier: !!sub.is_free_tier,
+        renewalOf: sub.renewal_of_subscription_id ?? null,
+      },
+      plan: sub.plans,
+      daysRemaining,
+      isExpired: endsAt < now,
+      payments,
+    };
+  },
+
+  // ===== CREATE RENEWAL ORDER =====
+  async createRenewal(auth: AuthContext, planId: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+
+    const plan = await repo.findPlanById(supabaseAdmin, planId);
+    if (!plan || !plan.is_active) throw NotFound('Plan not found or inactive');
+    if (plan.is_free || !plan.is_renewable) {
+      throw BadRequest('Free or non-renewable plans cannot be purchased as a renewal');
+    }
+
+    const pending = await repo.findExistingPendingRenewal(supabaseAdmin, auth.tenantId);
+    if (pending) {
+      const age = Date.now() - new Date(pending.created_at).getTime();
+      if (age < 30 * 60 * 1000) {
+        throw Conflict('A renewal is already in progress. Please complete the payment or wait 30 minutes.');
+      }
+    }
+
+    const rzp = requireRazorpay();
+    const order = await rzp.orders.create({
+      amount: plan.price_paise,
+      currency: 'INR',
+      receipt: 'renew_' + auth.tenantId.slice(0, 8) + '_' + Date.now(),
+      notes: { tenantId: auth.tenantId, planCode: plan.code, kind: 'renewal' },
+    }) as any;
+
+    const renewal = await repo.createPendingRenewal(supabaseAdmin, {
+      tenant_id: auth.tenantId,
+      plan_id: plan.id,
+      auth_user_id: auth.userId,
+      razorpay_order_id: order.id,
+      status: 'PENDING',
+      amount_paise: plan.price_paise,
+      currency: 'INR',
+    });
+
+    logger.info(
+      { renewalId: renewal.id, orderId: order.id, tenantId: auth.tenantId, plan: plan.code },
+      'Renewal order created',
+    );
+
+    return {
+      renewalId: renewal.id,
+      orderId: order.id,
+      amount: plan.price_paise,
+      currency: 'INR',
+      plan: { code: plan.code, name: plan.name },
+      razorpayKeyId: env.RAZORPAY_KEY_ID,
+    };
+  },
+
+  // ===== VERIFY RENEWAL =====
+  async verifyRenewal(input: VerifyRenewalInput) {
+    if (!env.RAZORPAY_KEY_SECRET) throw BadRequest('Razorpay not configured');
+
+    const renewal = await repo.findPendingRenewalById(supabaseAdmin, input.renewalId);
+    if (!renewal) throw NotFound('Renewal not found');
+
+    if (renewal.status === 'ACTIVATED') {
+      return { alreadyActivated: true, subscriptionId: renewal.activated_subscription_id };
+    }
+
+    const body = renewal.razorpay_order_id + '|' + input.paymentId;
+    const expected = crypto.createHmac('sha256', env.RAZORPAY_KEY_SECRET).update(body).digest('hex');
+    if (expected !== input.signature) {
+      throw Unauthorized('Payment signature verification failed');
+    }
+
+    return this.activateRenewal(renewal, input.paymentId);
+  },
+
+  // ===== ACTIVATE RENEWAL (internal, also called by webhook) =====
+  async activateRenewal(renewal: any, paymentId: string) {
+    const fresh = await repo.findPendingRenewalById(supabaseAdmin, renewal.id);
+    if (!fresh) throw NotFound('Renewal disappeared');
+    if (fresh.status === 'ACTIVATED') {
+      return { alreadyActivated: true, subscriptionId: fresh.activated_subscription_id, tenantId: fresh.tenant_id };
+    }
+
+    const plan = await repo.findPlanById(supabaseAdmin, fresh.plan_id);
+    if (!plan) throw NotFound('Plan not found');
+    if (plan.is_free || !plan.is_renewable) throw BadRequest('Plan cannot be renewed');
+
+    const prev = await repo.findLatestSubscriptionForTenant(supabaseAdmin, fresh.tenant_id);
+    const now = Date.now();
+    const prevEndsMs = prev?.ends_at ? new Date(prev.ends_at).getTime() : 0;
+    const startMs = Math.max(now, prevEndsMs);
+    const periodMs = plan.billing_cycle === 'YEARLY' ? 365 * 86400000 : 30 * 86400000;
+    const endsAt = new Date(startMs + periodMs).toISOString();
+    const startsAt = new Date(startMs).toISOString();
+
+    const newSub = await repo.createSubscription(supabaseAdmin, {
+      tenant_id: fresh.tenant_id,
+      plan_id: plan.id,
+      status: 'ACTIVE',
+      starts_at: startsAt,
+      ends_at: endsAt,
+      is_free_tier: false,
+      renewal_of_subscription_id: prev?.id ?? null,
+    });
+
+    try {
+      await repo.createSubscriptionPayment(supabaseAdmin, {
+        tenant_id: fresh.tenant_id,
+        amount_paise: fresh.amount_paise,
+        currency: fresh.currency || 'INR',
+        status: 'CAPTURED',
+        razorpay_order_id: fresh.razorpay_order_id,
+        razorpay_payment_id: paymentId,
+      });
+    } catch (e) {
+      logger.warn({ err: e, renewalId: fresh.id }, 'Failed to write subscription_payment');
+    }
+
+    await repo.updatePendingRenewal(supabaseAdmin, fresh.id, {
+      status: 'ACTIVATED',
+      razorpay_payment_id: paymentId,
+      activated_subscription_id: newSub.id,
+      updated_at: new Date().toISOString(),
+    });
+
+    await repo.ensureTenantActive(supabaseAdmin, fresh.tenant_id);
+
+    logger.info(
+      { renewalId: fresh.id, tenantId: fresh.tenant_id, subscriptionId: newSub.id, endsAt },
+      'Renewal activated',
+    );
+
+    return {
+      alreadyActivated: false,
+      subscriptionId: newSub.id,
+      tenantId: fresh.tenant_id,
+      endsAt,
+    };
   },
 
   async handleWebhook(rawBody: string, signature: string) {
@@ -200,8 +476,11 @@ export const subscriptionsService = {
     }
 
     let payload: any;
-    try { payload = JSON.parse(rawBody); }
-    catch { throw BadRequest('Invalid JSON in webhook body'); }
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      throw BadRequest('Invalid JSON in webhook body');
+    }
 
     const event = payload?.event as string | undefined;
     logger.info({ event }, 'Razorpay webhook received');
@@ -214,6 +493,24 @@ export const subscriptionsService = {
       if (!orderId || !paymentId) {
         logger.warn({ payload }, 'Webhook missing orderId/paymentId');
         return { ok: true, handled: false, reason: 'missing_ids' };
+      }
+
+      // Renewals are checked FIRST
+      const renewal = await repo.findPendingRenewalByOrderId(supabaseAdmin, orderId);
+      if (renewal) {
+        try {
+          const result = await this.activateRenewal(renewal, paymentId);
+          return {
+            ok: true,
+            handled: true,
+            kind: 'renewal',
+            tenantId: result.tenantId,
+            alreadyActivated: result.alreadyActivated,
+          };
+        } catch (e: any) {
+          logger.error({ err: e, orderId, renewalId: renewal.id }, 'Webhook renewal activation failed');
+          return { ok: false, handled: false, reason: 'renewal_activation_failed' };
+        }
       }
 
       const signup = await repo.findByOrderId(supabaseAdmin, orderId);
@@ -231,8 +528,7 @@ export const subscriptionsService = {
           webhook: payload,
         });
       } catch (e: any) {
-        const dup = e?.code === '23505'
-          || String(e?.message ?? '').toLowerCase().includes('duplicate key');
+        const dup = e?.code === '23505' || String(e?.message ?? '').toLowerCase().includes('duplicate key');
         if (dup) {
           const refreshed = await repo.findById(supabaseAdmin, signup.id);
           if (refreshed?.status === 'PROVISIONED' && refreshed.provisioned_tenant_id) {
@@ -243,22 +539,37 @@ export const subscriptionsService = {
         throw e;
       }
 
-      logger.info({ signupId: signup.id, tenantId: result.tenantId, already: result.alreadyProvisioned }, 'Webhook provisioned tenant');
+      logger.info(
+        { signupId: signup.id, tenantId: result.tenantId, already: result.alreadyProvisioned },
+        'Webhook provisioned tenant',
+      );
       return { ok: true, handled: true, tenantId: result.tenantId };
     }
 
     if (event === 'payment.failed') {
       const paymentEntity = payload?.payload?.payment?.entity ?? {};
       const orderId = paymentEntity?.order_id;
+
       if (orderId) {
-        const signup = await repo.findByOrderId(supabaseAdmin, orderId);
-        if (signup && signup.status === 'PENDING') {
-          await repo.updateSignup(supabaseAdmin, signup.id, {
+        const renewal = await repo.findPendingRenewalByOrderId(supabaseAdmin, orderId);
+        if (renewal && renewal.status === 'PENDING') {
+          await repo.updatePendingRenewal(supabaseAdmin, renewal.id, {
             status: 'FAILED',
             failure_reason: paymentEntity?.error_description ?? 'Payment failed',
             raw_webhook: payload,
+            updated_at: new Date().toISOString(),
           });
-          logger.info({ signupId: signup.id }, 'Marked signup as FAILED');
+          logger.info({ renewalId: renewal.id }, 'Marked renewal as FAILED');
+        } else {
+          const signup = await repo.findByOrderId(supabaseAdmin, orderId);
+          if (signup && signup.status === 'PENDING') {
+            await repo.updateSignup(supabaseAdmin, signup.id, {
+              status: 'FAILED',
+              failure_reason: paymentEntity?.error_description ?? 'Payment failed',
+              raw_webhook: payload,
+            });
+            logger.info({ signupId: signup.id }, 'Marked signup as FAILED');
+          }
         }
       }
       return { ok: true, handled: true };

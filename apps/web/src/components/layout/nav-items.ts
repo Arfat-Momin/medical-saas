@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Heart, Calendar, BedDouble, Hotel, Building,
   Building2, GitBranch, Network, Users, Shield, Pill, Package,
   Receipt, Truck, ShoppingCart, Boxes, FlaskConical, ScrollText,
-  BadgeDollarSign, BookMarked,
+  BadgeDollarSign, BookMarked, CreditCard,
 } from 'lucide-react';
 
 export interface NavItem { to: string; label: string; icon: any; }
@@ -58,6 +58,7 @@ export const hospitalNav: NavGroup[] = [
     items: [
       { to: '/billing/invoices', label: 'Invoices',       icon: Receipt },
       { to: '/settings/pricing', label: 'Pricing',        icon: BadgeDollarSign },
+      { to: '/settings/subscription', label: 'My Plan', icon: CreditCard },
     ],
   },
 ];
