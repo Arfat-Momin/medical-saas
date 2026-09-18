@@ -403,8 +403,8 @@ function DispenseModal({
         {/* Barcode Scanner */}
         {item && (
           <form onSubmit={handleBarcodeSubmit} className="mb-4">
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
                 <Input
                   ref={barcodeInputRef}
                   label="Scan Barcode"
@@ -414,18 +414,19 @@ function DispenseModal({
                   disabled={scanning}
                 />
               </div>
-              <Button type="submit" loading={scanning} className="mb-0.5">
-                Add
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="mb-0.5"
-                onClick={() => setCameraOpen(true)}
-                title="Scan with camera"
-              >
-                <Camera size={14} />
-              </Button>
+              <div className="flex gap-2 sm:mb-0.5">
+                <Button type="submit" loading={scanning} className="flex-1 sm:flex-none">
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setCameraOpen(true)}
+                  title="Scan with camera"
+                >
+                  <Camera size={14} />
+                </Button>
+              </div>
             </div>
           </form>
         )}

@@ -163,7 +163,7 @@ export function DoctorWorkloadChart({
             tick={{ fontSize: 11, fill: '#475569' }}
             axisLine={false}
             tickLine={false}
-            width={110}
+            width={70}
           />
           <Tooltip {...tooltipStyle} />
           <Bar dataKey="count" name="Consultations" fill={PURPLE} radius={[0, 6, 6, 0]} barSize={14} />

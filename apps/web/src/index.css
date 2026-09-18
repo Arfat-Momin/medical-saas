@@ -97,3 +97,139 @@ input[type=number] { -moz-appearance: textfield; }
     color: #ffffff !important;
   }
 }
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE + MOBILE + SIDEBAR-READABILITY FIXES
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ---- Sidebar / nav / header panels: readable glass, not see-through ---- */
+.glass-strong {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+.glass-thin {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(226, 232, 240, 0.8) !important;
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+/* Sidebar + topbar get the most opaque treatment for text contrast */
+aside .glass-strong,
+nav.glass-strong,
+header.glass-strong {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+}
+
+/* ---- Long user content must break, never overflow ---- */
+.whitespace-pre-wrap,
+[class*="whitespace-pre-wrap"] {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ---- Inputs and selects never push their parent wide ---- */
+input, select, textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ---- Prevent any stray wide element from causing page scroll ---- */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* ---- Flex children with long text shrink instead of pushing ---- */
+.min-w-0-safe { min-width: 0; }
+/* ═══════════════════════════════════════════════════════════════════
+   FINAL PASS — long user content, safe areas, form behavior
+   ═══════════════════════════════════════════════════════════════════ */
+
+.break-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+.safe-b-sticky { padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); }
+
+button:focus-visible { outline: 2px solid #bed0ff; outline-offset: 2px; }
+/* ═══════════════════════════════════════════════════════════════════
+   TABLE ALIGNMENT CONSISTENCY
+   ═══════════════════════════════════════════════════════════════════ */
+
+table > tbody > tr > td {
+  vertical-align: middle;
+}
+
+table th.text-right,
+table td.text-right {
+  font-variant-numeric: tabular-nums;
+}
+
+table > thead > tr > th {
+  white-space: nowrap;
+}
+
+table td.tabular-nums,
+table td.font-mono {
+  letter-spacing: -0.01em;
+}
+/* ═══════════════════════════════════════════════════════════════════
+   MOBILE TABLE SCROLLING — CORRECT APPROACH
+   ═══════════════════════════════════════════════════════════════════
+   The <table> element is NEVER restyled. Only the wrapper scrolls.
+   thead and tbody stay inside one table so columns always line up.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Any wrapper that carries the scroll helper class scrolls horizontally */
+.overflow-x-auto,
+[class*="overflow-x-auto"] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* When a wrapper scrolls, the table inside must stay wider than the phone */
+@media (max-width: 767px) {
+  .overflow-x-auto > table,
+  [class*="overflow-x-auto"] > table {
+    min-width: 640px;      /* forces horizontal scroll instead of column squeeze */
+  }
+
+  /* Two-column tables (rare) get a lighter floor so they still fit */
+  .overflow-x-auto > table.min-w-fit,
+  [class*="overflow-x-auto"] > table.min-w-fit {
+    min-width: 0;
+  }
+
+  /* Header labels never wrap mid-word */
+  table > thead > tr > th {
+    white-space: nowrap;
+  }
+
+  /* Body cells can wrap (patient name), but numbers stay on one line */
+  table > tbody > tr > td {
+    vertical-align: middle;
+  }
+  table > tbody > tr > td.tabular-nums,
+  table > tbody > tr > td.text-right {
+    white-space: nowrap;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Belt-and-braces: if a table is inside an overflow-HIDDEN card
+   (some pages still use that class), make the card scroll too.
+   ───────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  div[class~="overflow-hidden"]:has(> table) {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  div[class~="overflow-hidden"]:has(> table) > table {
+    min-width: 640px;
+  }
+}

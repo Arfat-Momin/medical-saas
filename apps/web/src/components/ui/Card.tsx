@@ -22,7 +22,7 @@ export function CardHeader({
         <h3 className="text-md font-semibold text-slate-900">{title}</h3>
         {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
       </div>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }

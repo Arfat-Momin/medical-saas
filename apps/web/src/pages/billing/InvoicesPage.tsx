@@ -121,7 +121,7 @@ export function InvoicesPage() {
 
       {list.data && list.data.rows.length > 0 && (
         <>
-          <Card className="overflow-hidden">
+          <Card className="overflow-x-auto overflow-y-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -144,9 +144,9 @@ export function InvoicesPage() {
                       <div className="font-mono text-xs text-slate-500">{inv.patients?.uhid}</div>
                     </td>
                     <td className="px-5 py-3 text-slate-600">{new Date(inv.created_at).toLocaleDateString()}</td>
-                    <td className="px-5 py-3 text-right font-mono">{inv.total_amount.toFixed(2)}</td>
-                    <td className="px-5 py-3 text-right font-mono text-green-700">{inv.paid_amount.toFixed(2)}</td>
-                    <td className="px-5 py-3 text-right font-mono text-red-600">{inv.balance_amount.toFixed(2)}</td>
+                    <td className="px-5 py-3 text-right font-mono tabular-nums">{inv.total_amount.toFixed(2)}</td>
+                    <td className="px-5 py-3 text-right font-mono tabular-nums text-green-700">{inv.paid_amount.toFixed(2)}</td>
+                    <td className="px-5 py-3 text-right font-mono tabular-nums text-red-600">{inv.balance_amount.toFixed(2)}</td>
                     <td className="px-5 py-3"><Badge tone={statusTone[inv.status] ?? 'gray'}>{inv.status}</Badge></td>
                     <td className="px-5 py-3 text-right">
                       <Link to={`/billing/invoices/${inv.id}`} className="text-sm text-brand-600 hover:underline">Open</Link>
@@ -193,9 +193,9 @@ export function InvoicesPage() {
               {lines.map((l, i) => (
                 <div key={i} className="rounded-md border border-slate-200 bg-slate-50/40 p-3">
                   {/* Row 1 - identity */}
-                  <div className="grid grid-cols-12 gap-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-12 sm:gap-3">
                     
-                    <div className="col-span-11 md:col-span-6">
+                    <div className="sm:col-span-11 md:col-span-6">
                       <Input
                         label="Description"
                         value={l.description}
@@ -203,7 +203,7 @@ export function InvoicesPage() {
                         placeholder="Consultation / Blood test / Medicine"
                       />
                     </div>
-                    <div className="col-span-1 flex items-end justify-end">
+                    <div className="flex items-end justify-end sm:col-span-1">
                       {lines.length > 1 && (
                         <button
                           type="button"
@@ -218,8 +218,8 @@ export function InvoicesPage() {
                   </div>
 
                   {/* Row 2 - numbers */}
-                  <div className="mt-3 grid grid-cols-12 gap-3">
-                    <div className="col-span-4 md:col-span-2">
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-12">
+                    <div className="md:col-span-2">
                       <Input
                         label="Qty"
                         type="number"
@@ -229,7 +229,7 @@ export function InvoicesPage() {
                         onChange={(e) => updateLine(i, { qty: e.target.value })}
                       />
                     </div>
-                    <div className="col-span-4 md:col-span-2">
+                    <div className="md:col-span-2">
                       <Input
                         label="Unit price (Rs)"
                         type="number"
@@ -239,7 +239,7 @@ export function InvoicesPage() {
                         onChange={(e) => updateLine(i, { unitPrice: e.target.value })}
                       />
                     </div>
-                    <div className="col-span-4 md:col-span-2">
+                    <div className="md:col-span-2">
                       <Input
                         label="Discount (Rs)"
                         type="number"
@@ -249,7 +249,7 @@ export function InvoicesPage() {
                         onChange={(e) => updateLine(i, { discount: e.target.value })}
                       />
                     </div>
-                    <div className="col-span-4 md:col-span-2">
+                    <div className="md:col-span-2">
                       <Input
                         label="Tax %"
                         type="number"
@@ -259,7 +259,7 @@ export function InvoicesPage() {
                         onChange={(e) => updateLine(i, { taxRate: e.target.value })}
                       />
                     </div>
-                    <div className="col-span-8 md:col-span-4 flex items-end justify-end">
+                    <div className="col-span-2 flex items-end justify-end sm:col-span-4 md:col-span-4">
                       <div className="w-full text-right text-xs text-slate-500">
                         Line total:{' '}
                         <span className="font-mono text-sm font-medium text-slate-800">

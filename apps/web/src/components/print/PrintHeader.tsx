@@ -18,7 +18,7 @@ export function PrintHeader({ organization, title, subtitle }: Props) {
   const addressLine = [org.address, org.city, org.state, org.pincode].filter(Boolean).join(', ');
 
   return (
-    <div className="mb-8 flex items-start justify-between gap-6 border-b-2 border-ink-900 pb-4">
+    <div className="mb-6 flex flex-col gap-4 border-b-2 border-ink-900 pb-4 md:mb-8 md:flex-row md:items-start md:justify-between md:gap-6">
       <div className="flex items-start gap-3">
         <div className="print-banner flex h-12 w-12 items-center justify-center rounded-xl bg-brand-800 text-white">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -43,7 +43,7 @@ export function PrintHeader({ organization, title, subtitle }: Props) {
         </div>
       </div>
 
-      <div className="shrink-0 text-right">
+      <div className="shrink-0 md:text-right">
         <div className="print-banner inline-block rounded-md bg-brand-800 px-6 py-2">
           <h2 className="text-xl font-extrabold uppercase tracking-widest text-white">{title}</h2>
         </div>

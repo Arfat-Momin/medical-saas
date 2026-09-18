@@ -40,14 +40,14 @@ export function MobileDrawer({ open, onClose }: Props) {
       <div
         onClick={onClose}
         className={cn(
-          'fixed inset-0 z-40 bg-ink-900/50 backdrop-blur-sm transition-opacity duration-200 md:hidden',
+          'fixed inset-0 z-40 bg-ink-900/60 transition-opacity duration-200 md:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
         aria-hidden="true"
       />
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col gap-3 p-3 transition-transform duration-300 ease-spring md:hidden safe-t safe-b',
+          'fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col gap-3 bg-white p-3 transition-transform duration-300 ease-spring md:hidden safe-t safe-b',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >

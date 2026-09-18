@@ -99,6 +99,19 @@ async function apiRequest<T>(
     throw new ApiError(401, 'UNAUTHORIZED', 'Session expired');
   }
 
+  // Detect non-JSON responses. During a Render free-tier cold start, the
+  // platform returns an HTML loading page with status 200. Without this
+  // guard, JSON.parse would silently fall back to {} and the query would
+  // resolve "successfully" with garbage data.
+  const ctype = res.headers.get('content-type') ?? '';
+  if (res.ok && !ctype.includes('application/json')) {
+    throw new ApiError(
+      0,
+      'COLD_START',
+      'The server is starting up. Please retry in a moment.',
+    );
+  }
+
   const data = await res.json().catch(() => ({} as any));
 
   if (!res.ok) {

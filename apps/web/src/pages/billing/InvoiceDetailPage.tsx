@@ -225,7 +225,7 @@ export function InvoiceDetailPage() {
 
         {/* Patient strip */}
         <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm sm:gap-x-8">
             <div>
               <span className="text-[11px] uppercase tracking-wider text-slate-500">Billed to</span>
               <p className="font-semibold text-slate-900">{i.patients?.full_name ?? 'Unknown patient'}</p>
@@ -283,7 +283,7 @@ export function InvoiceDetailPage() {
                 {i.items.map((it: any, idx: number) => {
                   const Icon = itemTypeIcon[it.item_type] ?? Receipt;
                   return (
-                    <tr key={it.id} className="hover:bg-slate-50/50">
+                    <tr key={it.id} className="align-middle hover:bg-slate-50/50">
                       <td className="px-6 py-3 text-slate-400 font-mono text-xs">{idx + 1}</td>
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2">
@@ -294,11 +294,11 @@ export function InvoiceDetailPage() {
                           <span className="text-slate-800">{it.description}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-right text-slate-600">{it.qty}</td>
-                      <td className="px-6 py-3 text-right font-mono text-slate-600">
+                      <td className="px-6 py-3 text-right tabular-nums text-slate-600">{it.qty}</td>
+                      <td className="px-6 py-3 text-right font-mono tabular-nums text-slate-600">
                         Rs.{Number(it.unit_price).toFixed(2)}
                       </td>
-                      <td className="px-6 py-3 text-right font-mono font-medium text-slate-900">
+                      <td className="px-6 py-3 text-right font-mono tabular-nums font-medium text-slate-900">
                         Rs.{Number(it.amount).toFixed(2)}
                       </td>
                     </tr>
@@ -372,7 +372,7 @@ export function InvoiceDetailPage() {
                   <li key={sub.id}>
                     <Link
                       to={`/billing/invoices/${sub.id}`}
-                      className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50"
+                      className="flex items-center gap-3 px-4 py-4 hover:bg-slate-50 sm:gap-4 sm:px-6"
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                         <Icon size={16} />

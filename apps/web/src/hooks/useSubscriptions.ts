@@ -1,8 +1,19 @@
-﻿import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { subscriptionsRepository as repo, type SignupInput } from '@/repositories/subscriptions.repository';
 
 export function usePublicPlans() {
-  return useQuery({ queryKey: ['subscriptions', 'plans'], queryFn: repo.listPlans, staleTime: 60_000 });
+  return useQuery({
+    queryKey: ['subscriptions', 'plans'],
+    queryFn: repo.listPlans,
+    // Public marketing data — must never be trusted from a stale cache.
+    // A persisted empty [] from an earlier session (dev DB, outage) would
+    // otherwise show "No plans available yet" for up to 7 days.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    retry: 3,
+  });
 }
 
 export function useSignup() {

@@ -55,7 +55,7 @@ export function InvoicePrint({ organization, invoice }: Props) {
       />
 
       {/* Bill from / Bill to */}
-      <div className="mb-6 grid grid-cols-2 gap-10 text-[12px]">
+      <div className="mb-6 grid grid-cols-1 gap-4 text-[12px] md:grid-cols-2 md:gap-10">
         <div>
           <p className="mb-2 text-[11px] font-bold text-ink-800">Bill from:</p>
           <p className="text-ink-800">{organization?.name ?? 'Hospital'}</p>
@@ -79,14 +79,14 @@ export function InvoicePrint({ organization, invoice }: Props) {
       </div>
 
       {/* Items table */}
-      <table className="mb-6 w-full border-collapse text-[12px]">
+      <div className="mb-6 overflow-x-auto"><table className="mb-6 w-full border-collapse text-[12px]">
         <thead>
           <tr className="border-y border-ink-900 text-left">
             <th className="w-[45%] py-3 pr-2 text-[11px] font-bold uppercase tracking-wider text-ink-800">Item</th>
             <th className="w-[12%] py-3 pr-2 text-center text-[11px] font-bold uppercase tracking-wider text-ink-800">Quantity</th>
             <th className="w-[15%] py-3 pr-2 text-right text-[11px] font-bold uppercase tracking-wider text-ink-800">Rate</th>
             <th className="w-[13%] py-3 pr-2 text-right text-[11px] font-bold uppercase tracking-wider text-ink-800">Tax</th>
-            <th className="w-[15%] py-3 pl-2 text-right text-[11px] font-bold uppercase tracking-wider text-ink-800">Amount</th>
+            <th className="w-[15%] py-3 pr-2 text-right text-[11px] font-bold uppercase tracking-wider text-ink-800">Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -99,14 +99,14 @@ export function InvoicePrint({ organization, invoice }: Props) {
               <td className="py-4 pr-2 align-top text-center tabular-nums">{String(it.qty).padStart(2, '0')}</td>
               <td className="py-4 pr-2 align-top text-right tabular-nums">{money(it.unit_price)}</td>
               <td className="py-4 pr-2 align-top text-right tabular-nums">{it.tax_rate ? `${it.tax_rate}%` : '0.00'}</td>
-              <td className="py-4 pl-2 align-top text-right font-semibold tabular-nums">{money(it.amount)}</td>
+              <td className="py-4 pr-2 align-top text-right font-semibold tabular-nums">{money(it.amount)}</td>
             </tr>
           ))}
           {invoice.items.length === 0 && (
             <tr><td colSpan={5} className="py-8 text-center text-ink-400">No items</td></tr>
           )}
         </tbody>
-      </table>
+      </table></div>
 
       {/* Terms + Totals */}
       <div className="mb-8 grid grid-cols-2 gap-10 text-[12px]">
@@ -126,7 +126,7 @@ export function InvoicePrint({ organization, invoice }: Props) {
 
       {/* Grand total bar */}
       <div className="flex justify-end">
-        <div className="print-banner flex min-w-[280px] items-center justify-between gap-6 rounded-md bg-brand-800 px-6 py-4 text-white">
+        <div className="print-banner flex w-full items-center justify-between gap-4 rounded-md bg-brand-800 px-4 py-4 text-white sm:gap-6 sm:px-6 md:w-auto md:min-w-[280px]">
           <span className="text-[14px] font-bold uppercase tracking-wider">Total</span>
           <span className="text-[18px] font-bold tabular-nums">{money(invoice.total_amount)}</span>
         </div>
@@ -136,13 +136,13 @@ export function InvoicePrint({ organization, invoice }: Props) {
       {invoice.payments && invoice.payments.length > 0 && (
         <div className="mt-10">
           <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-ink-700">Payment history</p>
-          <table className="w-full border-collapse text-[11px]">
+          <div className="overflow-x-auto"><table className="w-full border-collapse text-[11px]">
             <thead>
               <tr className="border-b border-ink-300 text-left">
                 <th className="py-2 pr-2 font-semibold">Date</th>
                 <th className="py-2 pr-2 font-semibold">Method</th>
                 <th className="py-2 pr-2 font-semibold">Reference</th>
-                <th className="py-2 pl-2 text-right font-semibold">Amount</th>
+                <th className="py-2 pr-2 text-right font-semibold">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -151,11 +151,11 @@ export function InvoicePrint({ organization, invoice }: Props) {
                   <td className="py-2 pr-2">{new Date(p.received_at).toLocaleString('en-IN')}</td>
                   <td className="py-2 pr-2 uppercase">{p.method}</td>
                   <td className="py-2 pr-2 font-mono">{p.reference ?? '-'}</td>
-                  <td className="py-2 pl-2 text-right tabular-nums">{money(p.amount)}</td>
+                  <td className="py-2 pr-2 text-right tabular-nums">{money(p.amount)}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 

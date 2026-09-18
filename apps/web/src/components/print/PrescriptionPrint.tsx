@@ -41,7 +41,7 @@ export function PrescriptionPrint({ organization, patient, doctor, encounter }: 
     <div className="text-ink-900">
       <PrintHeader organization={organization} title="Prescription" subtitle={`Date: ${encounter.encounter_date}`} />
 
-      <div className="mb-6 grid grid-cols-2 gap-10 text-[12px]">
+      <div className="mb-6 grid grid-cols-1 gap-4 text-[12px] md:grid-cols-2 md:gap-10">
         <div>
           <p className="mb-2 text-[11px] font-bold text-ink-800">Patient</p>
           <p className="text-ink-900">{patient.full_name}</p>
@@ -69,7 +69,7 @@ export function PrescriptionPrint({ organization, patient, doctor, encounter }: 
 
       {hasVitals && (
         <Section title="Vitals">
-          <div className="grid grid-cols-4 gap-3 text-[11px]">
+          <div className="grid grid-cols-2 gap-3 text-[11px] sm:grid-cols-3 md:grid-cols-4">
             {encounter.vitals?.temperature_c != null && <Vital label="Temp" value={`${encounter.vitals.temperature_c}°C`} />}
             {encounter.vitals?.pulse != null && <Vital label="Pulse" value={`${encounter.vitals.pulse} bpm`} />}
             {encounter.vitals?.bp_systolic != null && encounter.vitals?.bp_diastolic != null && (
@@ -102,7 +102,7 @@ export function PrescriptionPrint({ organization, patient, doctor, encounter }: 
         {rxItems.length === 0 ? (
           <p className="text-[12px] text-ink-500">No medicines prescribed.</p>
         ) : (
-          <table className="w-full border-collapse text-[12px]">
+          <div className="overflow-x-auto"><table className="w-full border-collapse text-[12px]">
             <thead>
               <tr className="border-y border-ink-900 text-left">
                 <th className="w-[6%] py-3 text-[11px] font-bold uppercase">#</th>
@@ -121,14 +121,14 @@ export function PrescriptionPrint({ organization, patient, doctor, encounter }: 
                     <p className="font-medium">{item.medicine_name}</p>
                     {item.instructions && <p className="text-[10px] italic text-ink-500">{item.instructions}</p>}
                   </td>
-                  <td className="py-3 align-top">{item.dosage ?? '-'}</td>
+                  <td className="py-3 align-top tabular-nums">{item.dosage ?? '-'}</td>
                   <td className="py-3 align-top">{item.frequency ?? '-'}</td>
                   <td className="py-3 align-top">{item.duration ?? '-'}</td>
                   <td className="py-3 align-top">{item.route ?? '-'}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
         {encounter.prescription?.notes && (
           <p className="mt-3 text-[10px] italic text-ink-500">Notes: {encounter.prescription.notes}</p>

@@ -38,7 +38,7 @@ export function PharmacyInvoicesPage() {
 
       {list.data && list.data.rows.length > 0 && (
         <>
-          <Card className="overflow-hidden">
+          <Card className="overflow-x-auto overflow-y-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>

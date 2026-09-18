@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Activity } from 'lucide-react';
+import { Activity, Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -37,6 +37,7 @@ export function SignupPage() {
   const verify = useVerifySignature();
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { register, handleSubmit, setValue, watch, formState: { isSubmitting } } = useForm<FormValues>({
     defaultValues: { contactName: '', email: '', password: '', contactPhone: '', hospitalName: '', tenantType: 'CLINIC', planCode: '' },
@@ -166,16 +167,35 @@ export function SignupPage() {
             <Input label="Your full name" placeholder="Dr. Anita Rao" {...register('contactName', { required: true })} />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input label="Email" type="email" placeholder="you@example.com" {...register('email', { required: true })} />
-              <Input label="Password" type="password" placeholder="At least 8 characters" {...register('password', { required: true, minLength: 8 })} />
+              <Input
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                rightSlot={
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setShowPassword((s) => !s)}
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                }
+                {...register('password', { required: true, minLength: 8 })}
+              />
             </div>
             <Input label="Phone (optional)" placeholder="9876543210" {...register('contactPhone')} />
 
-            <Button type="submit" className="w-full" size="lg" loading={busy}>
-              Continue to payment
-            </Button>
-            <p className="text-center text-xs text-slate-500">
-              You will be charged the plan amount via Razorpay. Cancel anytime.
-            </p>
+            <div className="sticky bottom-0 -mx-5 -mb-5 border-t border-slate-100 bg-white px-5 py-3 md:static md:mx-0 md:mb-0 md:border-0 md:bg-transparent md:p-0">
+              <Button type="submit" className="w-full" size="lg" loading={busy}>
+                Continue to payment
+              </Button>
+              <p className="mt-2 text-center text-xs text-slate-500">
+                You will be charged the plan amount via Razorpay. Cancel anytime.
+              </p>
+            </div>
           </form>
         </div>
 

@@ -25,8 +25,9 @@ export function AppShell() {
 
   return (
     <>
-      {/* Ambient background — fixed, off flex flow, cannot push layout */}
+      {/* Ambient background — hidden on mobile (perf), off flex flow on desktop */}
       <div
+        className="hidden md:block"
         aria-hidden="true"
         style={{
           position: 'fixed',
@@ -67,14 +68,17 @@ export function AppShell() {
         />
       </div>
 
-      {/* Shell — only flex items live here */}
-      <div className="relative z-10 flex h-screen overflow-hidden">
+      {/* Shell — safe-area top so nothing hides under the notch */}
+      <div
+        className="relative z-10 flex h-screen overflow-hidden"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      >
         <Sidebar />
         <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
         <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-3">
           <Topbar onOpenMenu={() => setDrawerOpen(true)} />
-          <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
+          <main className="flex-1 overflow-y-auto pb-28 md:pb-0">
             <div className="mx-auto max-w-[1500px]">
               <Outlet />
             </div>

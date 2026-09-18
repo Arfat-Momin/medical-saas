@@ -106,7 +106,7 @@ export function RolesPage() {
                   <Badge tone="gray">+{role.permissions.length - 3} more</Badge>
                 )}
               </div>
-              <div className="mt-3 flex items-center justify-end text-xs font-medium text-brand-600 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="mt-3 flex items-center justify-end text-xs font-medium text-brand-600 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                 View access <ChevronRight size={12} />
               </div>
             </CardBody>
