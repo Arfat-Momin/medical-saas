@@ -39,3 +39,12 @@ coverage/
 
 # Stale build output
 apps/web/dist/
+
+
+# Local backup folders — never commit
+_fix-backup-*
+
+# Build outputs — never commit
+dist/
+apps/web/dist/
+apps/backend/dist/
