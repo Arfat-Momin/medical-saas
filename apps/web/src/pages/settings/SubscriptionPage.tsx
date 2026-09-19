@@ -21,6 +21,7 @@ import {
   useRenewSubscription,
   useVerifyRenewal,
 } from '@/hooks/useSubscriptions';
+import { deriveSubscriptionView } from '@/components/subscription/subscriptionView';
 import { PERMISSIONS } from '@medical/shared';
 import { cn } from '@/lib/cn';
 
@@ -85,7 +86,15 @@ export function SubscriptionPage() {
   }
 
   const { subscription, plan, daysRemaining, isExpired, payments } = current.data;
-  const isFreeTier = subscription?.isFreeTier ?? false;
+  const view = deriveSubscriptionView(
+    subscription,
+    plan as any,
+    daysRemaining,
+    isExpired,
+  );
+  const isFreeTier = view.isFree;
+  const isExpiredReal = view.isExpired;
+  const noSubscription = view.noSubscription;
 
   async function handleRenew(planId: string) {
     setError(null);
@@ -195,7 +204,7 @@ export function SubscriptionPage() {
       />
 
       {/* Free tier banner */}
-      {isFreeTier && !isExpired && (
+      {isFreeTier && !isExpiredReal && (
         <div className="mb-4">
           <Alert tone="info">
             <div className="flex items-start gap-2">
@@ -211,16 +220,28 @@ export function SubscriptionPage() {
         </div>
       )}
 
-      {isExpired && (
+      {isExpiredReal && (
         <div className="mb-4">
           <Alert tone="error">
             <div className="flex items-start gap-2">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
               <div>
-                <strong>Your plan has expired.</strong>
-                <p className="mt-0.5 text-xs">
-                  Renew now to restore full access.
-                </p>
+                {isFreeTier ? (
+                  <>
+                    <strong>Your free trial has ended.</strong>
+                    <p className="mt-0.5 text-xs">
+                      Upgrade to a paid plan to restore full access. You can keep
+                      the same organisation and data.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <strong>Your subscription has expired.</strong>
+                    <p className="mt-0.5 text-xs">
+                      Renew now to restore full access.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </Alert>
@@ -376,5 +397,8 @@ function Limit({ label, value }: { label: string; value: string | number }) {
     </div>
   );
 }
+
+
+
 
 

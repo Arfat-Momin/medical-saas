@@ -292,7 +292,7 @@ export const subscriptionsService = {
         status: sub.status,
         startsAt: sub.starts_at,
         endsAt: sub.ends_at,
-        isFreeTier: !!sub.is_free_tier,
+        isFreeTier: !!(sub.is_free_tier || sub.plans?.is_free),
         renewalOf: sub.renewal_of_subscription_id ?? null,
       },
       plan: sub.plans,
@@ -555,6 +555,7 @@ export const subscriptionsService = {
     return { ok: true, handled: false, reason: 'unhandled_event:' + event };
   },
 };
+
 
 
 

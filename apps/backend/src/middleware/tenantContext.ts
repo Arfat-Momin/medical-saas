@@ -111,6 +111,12 @@ function isRenewalAllowedPath(originalUrl: string): boolean {
   return RENEWAL_ALLOWED_PATHS.has(clean);
 }
 
+// A newly provisioned subscription's `starts_at` can be a fraction of a
+// second after `now` due to Postgres `NOW()` vs Node `Date.now()` drift.
+// Allow a small grace window so a fresh free trial is not treated as
+// "not yet started" (which would show the expiry gate on day zero).
+const START_GRACE_MS = 5 * 60 * 1000; // 5 minutes
+
 function isSubscriptionActive(sub: SubscriptionRuntime | null): boolean {
   if (!sub) return false;
   if (sub.status !== 'ACTIVE' && sub.status !== 'TRIAL') return false;
@@ -118,7 +124,7 @@ function isSubscriptionActive(sub: SubscriptionRuntime | null): boolean {
   const endsAt = new Date(sub.endsAt).getTime();
   const startsAt = new Date(sub.startsAt).getTime();
   if (!Number.isFinite(endsAt) || !Number.isFinite(startsAt)) return false;
-  return startsAt <= now && endsAt > now;
+  return startsAt - START_GRACE_MS <= now && endsAt > now;
 }
 
 export const requireTenant: RequestHandler = async (req, _res, next) => {
@@ -176,3 +182,4 @@ export const requireBranchScope: RequestHandler = (req, _res, next) => {
   if (headerBranch) (req as any).branchId = headerBranch;
   next();
 };
+
