@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+﻿import type { RequestHandler } from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { Unauthorized } from '../utils/errors.js';
 import type { AuthContext } from '@medical/shared';
@@ -57,7 +57,26 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
       roles = ['SUPER_ADMIN'];
       permissions = [...DEFAULT_ROLE_PERMISSIONS.SUPER_ADMIN];
     } else {
-      const requestedTenantId = (jwt.tenant_id as string | undefined) ?? null;
+      let requestedTenantId = (jwt.tenant_id as string | undefined) ?? null;
+
+      // FALLBACK: the Supabase custom access-token hook normally injects
+      // `tenant_id` into the JWT. When it is missing (hook not configured,
+      // token minted before the hook existed, cross-tenant signup flow),
+      // resolve the caller's tenant from their active memberships so we do
+      // not incorrectly reject every request with "No tenant context".
+      if (!requestedTenantId) {
+        const { data: firstMembership } = await supabaseAdmin
+          .from('memberships')
+          .select('tenant_id')
+          .eq('user_id', userId)
+          .eq('is_active', true)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        requestedTenantId =
+          (firstMembership as { tenant_id: string } | null)?.tenant_id ?? null;
+      }
 
       if (requestedTenantId) {
         const { data: memberships, error: memErr } = await supabaseAdmin

@@ -13,9 +13,12 @@ export function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
 
-  useEffect(() => { setDrawerOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
 
-  if (isLoading) return <FullPageSpinner label="Loading your session…" />;
+  if (isLoading) return <FullPageSpinner label="Loading your session..." />;
+
   if (isError) {
     return (
       <div className="flex h-screen items-center justify-center p-6 text-center text-sm text-red-600">
@@ -26,7 +29,7 @@ export function AppShell() {
 
   return (
     <>
-      {/* Ambient background — hidden on mobile (perf), off flex flow on desktop */}
+      {/* Ambient background - hidden on mobile (perf), off flex flow on desktop */}
       <div
         className="hidden md:block"
         aria-hidden="true"
@@ -38,20 +41,6 @@ export function AppShell() {
           zIndex: 0,
         }}
       >
-        <main className="flex-1 overflow-y-auto pb-28 md:pb-0">
-          <div className="mx-auto max-w-[1500px]">
-            <Outlet />
-          </div>
-        </main>
-
-      // ... with:
-        <main className="flex-1 overflow-y-auto pb-28 md:pb-0">
-          <div className="mx-auto max-w-[1500px]">
-            <SubscriptionGate>
-              <Outlet />
-            </SubscriptionGate>
-          </div>
-        </main>
         <div
           className="ambient-float"
           style={{
@@ -83,7 +72,7 @@ export function AppShell() {
         />
       </div>
 
-      {/* Shell — safe-area top so nothing hides under the notch */}
+      {/* Shell - safe-area top so nothing hides under the notch */}
       <div
         className="relative z-10 flex h-screen overflow-hidden"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
@@ -95,7 +84,9 @@ export function AppShell() {
           <Topbar onOpenMenu={() => setDrawerOpen(true)} />
           <main className="flex-1 overflow-y-auto pb-28 md:pb-0">
             <div className="mx-auto max-w-[1500px]">
-              <Outlet />
+              <SubscriptionGate>
+                <Outlet />
+              </SubscriptionGate>
             </div>
           </main>
         </div>

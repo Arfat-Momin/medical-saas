@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+﻿import type { RequestHandler } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../config/supabase.js';
 import { env } from '../config/env.js';
@@ -111,20 +111,24 @@ function isRenewalAllowedPath(originalUrl: string): boolean {
   return RENEWAL_ALLOWED_PATHS.has(clean);
 }
 
-// A newly provisioned subscription's `starts_at` can be a fraction of a
-// second after `now` due to Postgres `NOW()` vs Node `Date.now()` drift.
-// Allow a small grace window so a fresh free trial is not treated as
-// "not yet started" (which would show the expiry gate on day zero).
-const START_GRACE_MS = 5 * 60 * 1000; // 5 minutes
-
 function isSubscriptionActive(sub: SubscriptionRuntime | null): boolean {
   if (!sub) return false;
-  if (sub.status !== 'ACTIVE' && sub.status !== 'TRIAL') return false;
-  const now = Date.now();
-  const endsAt = new Date(sub.endsAt).getTime();
-  const startsAt = new Date(sub.startsAt).getTime();
-  if (!Number.isFinite(endsAt) || !Number.isFinite(startsAt)) return false;
-  return startsAt - START_GRACE_MS <= now && endsAt > now;
+  const statusUpper = String(sub.status ?? '').trim().toUpperCase();
+  // Terminal states are never active.
+  if (
+    statusUpper === 'CANCELLED' ||
+    statusUpper === 'CANCELED' ||
+    statusUpper === 'SUSPENDED' ||
+    statusUpper === 'EXPIRED' ||
+    statusUpper === 'FAILED' ||
+    statusUpper === 'TERMINATED'
+  ) {
+    return false;
+  }
+  // Missing/invalid ends_at = perpetual subscription; trust the status.
+  const endsAtMs = sub.endsAt ? new Date(sub.endsAt).getTime() : NaN;
+  if (!Number.isFinite(endsAtMs)) return true;
+  return endsAtMs > Date.now();
 }
 
 export const requireTenant: RequestHandler = async (req, _res, next) => {
@@ -182,4 +186,5 @@ export const requireBranchScope: RequestHandler = (req, _res, next) => {
   if (headerBranch) (req as any).branchId = headerBranch;
   next();
 };
+
 

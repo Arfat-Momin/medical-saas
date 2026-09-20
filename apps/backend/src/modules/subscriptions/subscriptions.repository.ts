@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const subscriptionsRepository = {
   async listActivePlans(client: SupabaseClient) {
@@ -119,16 +119,61 @@ export const subscriptionsRepository = {
 
   // -------- RENEWAL --------
 
-  async findLatestSubscriptionForTenant(client: SupabaseClient, tenantId: string) {
-    const { data, error } = await client
-      .from('subscriptions')
-      .select('*, plans:plan_id ( id, code, name, price_paise, billing_cycle, max_branches, max_users, is_free, trial_days, is_renewable )')
-      .eq('tenant_id', tenantId)
-      .order('ends_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
+  async findLatestSubscriptionForTenant(
+    client: SupabaseClient,
+    tenantId: string,
+  ) {
+    // NOTE: deliberately NOT using .maybeSingle() here. Under load,
+    // PostgREST sometimes returns {data:null,error:null} for maybeSingle
+    // while a plain .limit(1) works. Use the array form + retries.
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const t0 = Date.now();
+      const { data, error, status, statusText } = await client
+        .from('subscriptions')
+        .select('id, tenant_id, plan_id, status, starts_at, ends_at, is_free_tier, renewal_of_subscription_id, created_at')
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      const ms = Date.now() - t0;
+      const rowCount = Array.isArray(data) ? data.length : -1;
+
+      // Visible in the backend console so we can see exactly what
+      // Supabase returns on each attempt.
+      // eslint-disable-next-line no-console
+      console.log(
+        `[subs-repo] tenant=${tenantId} attempt=${attempt} ms=${ms} status=${status} ${statusText} rows=${rowCount} err=${error?.code ?? '-'} ${error?.message ?? ''}`,
+      );
+
+      if (error) {
+        lastError = error;
+        await new Promise((r) => setTimeout(r, 200 * attempt));
+        continue;
+      }
+      if (!Array.isArray(data) || data.length === 0) {
+        await new Promise((r) => setTimeout(r, 200 * attempt));
+        continue;
+      }
+
+      const sub = data[0] as any;
+
+      let plan: any = null;
+      if (sub.plan_id) {
+        const { data: planRow, error: planErr } = await client
+          .from('plans')
+          .select('id, code, name, price_paise, billing_cycle, max_branches, max_users, is_free, trial_days, is_renewable')
+          .eq('id', sub.plan_id)
+          .limit(1);
+        if (planErr) throw planErr;
+        plan = Array.isArray(planRow) && planRow.length > 0 ? planRow[0] : null;
+      }
+      return { ...sub, plans: plan };
+    }
+
+    if (lastError) throw lastError;
+    return null;
   },
 
   async createPendingRenewal(client: SupabaseClient, payload: Record<string, unknown>) {
@@ -195,3 +240,6 @@ export const subscriptionsRepository = {
     await client.from('tenants').update({ status: 'ACTIVE' }).eq('id', tenantId);
   },
 };
+
+
+

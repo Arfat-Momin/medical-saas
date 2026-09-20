@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+﻿import crypto from 'node:crypto';
 import { supabaseAdmin } from '../../config/supabase.js';
 import { env } from '../../config/env.js';
 import { subscriptionsRepository as repo } from './subscriptions.repository.js';
@@ -266,11 +266,53 @@ export const subscriptionsService = {
   async getCurrentSubscription(auth: AuthContext) {
     if (!auth.tenantId) throw NotFound('No tenant context');
 
-    const sub = await repo.findLatestSubscriptionForTenant(supabaseAdmin, auth.tenantId);
+    let sub: any = await repo.findLatestSubscriptionForTenant(supabaseAdmin, auth.tenantId);
 
-    // No subscription row yet ? return an empty state instead of 404.
-    // The frontend gate shows the expired / no-plan UI so the user can pay.
+    // Retry the direct query if the repo returned null.
+    // Supabase is occasionally returning {data:null,error:null} on the
+    // .maybeSingle() path under load - without this, the endpoint
+    // silently degrades to the "no subscription" empty state.
     if (!sub) {
+      for (let attempt = 1; attempt <= 3 && !sub; attempt += 1) {
+        const { data: rows, error: err } = await supabaseAdmin
+          .from('subscriptions')
+          .select('*')
+          .eq('tenant_id', auth.tenantId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        logger.warn(
+          {
+            tenantId: auth.tenantId,
+            attempt,
+            errorCode: (err as any)?.code,
+            errorMessage: (err as any)?.message,
+            rowCount: Array.isArray(rows) ? rows.length : 'n/a',
+          },
+          'getCurrentSubscription: direct retry',
+        );
+
+        if (!err && Array.isArray(rows) && rows.length > 0) {
+          sub = rows[0];
+          if (sub.plan_id) {
+            const { data: planRow } = await supabaseAdmin
+              .from('plans')
+              .select('*')
+              .eq('id', sub.plan_id)
+              .maybeSingle();
+            sub.plans = planRow ?? null;
+          }
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 300 * attempt));
+      }
+    }
+
+    if (!sub) {
+      logger.warn(
+        { tenantId: auth.tenantId },
+        'getCurrentSubscription: no subscription row for tenant',
+      );
       return {
         subscription: null,
         plan: null,
@@ -280,11 +322,45 @@ export const subscriptionsService = {
       };
     }
 
-    const endsAt = new Date(sub.ends_at).getTime();
     const now = Date.now();
-    const daysRemaining = Math.max(0, Math.ceil((endsAt - now) / 86400000));
+    const endsAtMs = sub.ends_at ? new Date(sub.ends_at).getTime() : NaN;
+    const hasValidEnd = Number.isFinite(endsAtMs);
+    const daysRemaining = hasValidEnd
+      ? Math.max(0, Math.ceil((endsAtMs - now) / 86400000))
+      : 0;
+
+    const statusUpper = String(sub.status ?? '').trim().toUpperCase();
+    // A subscription is expired ONLY when:
+    //   1. its status is explicitly terminal (CANCELLED/SUSPENDED/EXPIRED/FAILED), OR
+    //   2. it has a *valid* end date in the past.
+    // A null/invalid ends_at on a non-terminal status is treated as
+    // "perpetual / still active" so we never show the renewal page by
+    // accident for ACTIVE / TRIAL / GRACE / PAID / SUBSCRIBED tenants.
+    const TERMINAL_STATUSES = new Set([
+      'CANCELLED',
+      'CANCELED',
+      'SUSPENDED',
+      'EXPIRED',
+      'FAILED',
+      'TERMINATED',
+    ]);
+    const statusIsTerminal = TERMINAL_STATUSES.has(statusUpper);
+    const isExpired = statusIsTerminal || (hasValidEnd && endsAtMs <= now);
 
     const payments = await repo.listRecentPayments(supabaseAdmin, auth.tenantId, 10);
+
+    logger.info(
+      {
+        tenantId: auth.tenantId,
+        subId: sub.id,
+        status: sub.status,
+        endsAt: sub.ends_at,
+        hasValidEnd,
+        isExpired,
+        planCode: (sub.plans as any)?.code ?? null,
+      },
+      'getCurrentSubscription: returning subscription',
+    );
 
     return {
       subscription: {
@@ -292,12 +368,12 @@ export const subscriptionsService = {
         status: sub.status,
         startsAt: sub.starts_at,
         endsAt: sub.ends_at,
-        isFreeTier: !!(sub.is_free_tier || sub.plans?.is_free),
+        isFreeTier: !!(sub.is_free_tier || (sub.plans as any)?.is_free),
         renewalOf: sub.renewal_of_subscription_id ?? null,
       },
       plan: sub.plans,
       daysRemaining,
-      isExpired: endsAt < now,
+      isExpired,
       payments,
     };
   },
@@ -376,6 +452,25 @@ export const subscriptionsService = {
     if (!fresh) throw NotFound('Renewal disappeared');
     if (fresh.status === 'ACTIVATED') {
       return { alreadyActivated: true, subscriptionId: fresh.activated_subscription_id, tenantId: fresh.tenant_id };
+    }
+
+    // Atomic claim: flip PENDING -> ACTIVATING. Only the first caller wins.
+    // Losers see 0 rows affected and take the "already activated" path.
+    const { data: claimed, error: claimErr } = await supabaseAdmin
+      .from('pending_renewals')
+      .update({ status: 'ACTIVATING' })
+      .eq('id', fresh.id)
+      .eq('status', 'PENDING')
+      .select('id');
+
+    if (claimErr) throw claimErr;
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      const again = await repo.findPendingRenewalById(supabaseAdmin, fresh.id);
+      return {
+        alreadyActivated: again?.status === 'ACTIVATED',
+        subscriptionId: again?.activated_subscription_id ?? null,
+        tenantId: again?.tenant_id ?? fresh.tenant_id,
+      };
     }
 
     const plan = await repo.findPlanById(supabaseAdmin, fresh.plan_id);
@@ -555,6 +650,7 @@ export const subscriptionsService = {
     return { ok: true, handled: false, reason: 'unhandled_event:' + event };
   },
 };
+
 
 
 

@@ -1,12 +1,12 @@
-import { supabaseAdmin } from '../../config/supabase.js';
+﻿import { supabaseAdmin, freshAnonClient } from '../../config/supabase.js';
 
 export const authRepository = {
   async signInWithPassword(email: string, password: string) {
-    return supabaseAdmin.auth.signInWithPassword({ email, password });
+    return freshAnonClient().auth.signInWithPassword({ email, password });
   },
 
   async refreshSession(refreshToken: string) {
-    return supabaseAdmin.auth.refreshSession({ refresh_token: refreshToken });
+    return freshAnonClient().auth.refreshSession({ refresh_token: refreshToken });
   },
 
   async signOut(accessToken: string) {
@@ -60,7 +60,7 @@ export const authRepository = {
    *      non-null branch_id from those memberships.
    *   2. Otherwise, fall back to the tenant's first active branch ONLY
    *      when the user is an active member of that tenant.
-   *   3. If the user has no active membership in the tenant → return
+   *   3. If the user has no active membership in the tenant â†’ return
    *      null. Do NOT leak the tenant's default branch.
    */
   async getPrimaryBranchForUser(userId: string, tenantId: string): Promise<string | null> {
@@ -72,7 +72,7 @@ export const authRepository = {
       .eq('is_active', true);
     if (mErr) throw mErr;
 
-    // 3. No active membership → no branch context. Never fall back.
+    // 3. No active membership â†’ no branch context. Never fall back.
     if (!memberships || memberships.length === 0) return null;
 
     const explicit = memberships
@@ -80,7 +80,7 @@ export const authRepository = {
       .find((id: string | null) => !!id);
     if (explicit) return explicit;
 
-    // Active member, no branch assigned → default to tenant's first branch.
+    // Active member, no branch assigned â†’ default to tenant's first branch.
     const { data: branch, error: bErr } = await supabaseAdmin
       .from('branches')
       .select('id')
