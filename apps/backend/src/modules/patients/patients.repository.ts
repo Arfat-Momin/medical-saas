@@ -19,12 +19,13 @@ export const patientsRepository = {
       .from('patients')
       .select('*', { count: 'exact' })
       .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false });
 
     if (opts.branchId) q = q.eq('branch_id', opts.branchId);
 
     if (opts.search && opts.search.trim()) {
-      const s = opts.search.trim().replace(/[,%]/g, '');
+      const s = opts.search.trim().replace(/[,%_]/g, '');
       q = q.or(`full_name.ilike.%${s}%,mobile.ilike.%${s}%,uhid.ilike.%${s}%`);
     }
 
@@ -45,6 +46,7 @@ export const patientsRepository = {
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('id', id)
+      .is('deleted_at', null)
       .maybeSingle();
     if (error) throw error;
     return data;
@@ -56,6 +58,7 @@ export const patientsRepository = {
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('uhid', uhid)
+      .is('deleted_at', null)
       .maybeSingle();
     if (error) throw error;
     return data;
@@ -73,6 +76,7 @@ export const patientsRepository = {
         .from('patients')
         .select('id, uhid, full_name, mobile, date_of_birth')
         .eq('tenant_id', tenantId)
+        .is('deleted_at', null)
         .eq('mobile', input.mobile)
         .limit(5);
       if (data) matches.push(...data.map((p) => ({ ...p, reason: 'same_mobile' })));
@@ -83,6 +87,7 @@ export const patientsRepository = {
         .from('patients')
         .select('id, uhid, full_name, mobile, date_of_birth')
         .eq('tenant_id', tenantId)
+        .is('deleted_at', null)
         .eq('full_name', input.fullName)
         .eq('date_of_birth', input.dateOfBirth)
         .limit(5);
@@ -107,7 +112,32 @@ export const patientsRepository = {
       .update(patch)
       .eq('tenant_id', tenantId)
       .eq('id', id)
+      .is('deleted_at', null)
       .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Soft-delete a patient. Medical records must never be hard-deleted - every
+   * invoice, encounter, prescription, and lab order that references this
+   * patient must remain intact for compliance. The row stays in the database
+   * with a deleted_at timestamp; every SELECT filters it out.
+   *
+   * Route-level guard: HOSPITAL_ADMIN only.
+   */
+  async softDelete(client: SupabaseClient, tenantId: string, id: string) {
+    // Set updated_at too so the sync pull cursor (gt updated_at) picks this
+    // row up and other devices can purge their local copy.
+    const now = new Date().toISOString();
+    const { data, error } = await client
+      .from('patients')
+      .update({ deleted_at: now, updated_at: now })
+      .eq('tenant_id', tenantId)
+      .eq('id', id)
+      .is('deleted_at', null)
+      .select('id')
       .single();
     if (error) throw error;
     return data;

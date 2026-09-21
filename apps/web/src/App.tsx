@@ -44,63 +44,57 @@ import { PharmacyInvoicesPage } from '@/pages/pharmacy/PharmacyInvoicesPage';
 import { LabInvoicesPage } from '@/pages/laboratory/LabInvoicesPage';
 import { SubscriptionPage } from '@/pages/settings/SubscriptionPage';
 
-
-
-
 export default function App() {
   return (
     <>
       <OfflineIndicator />
       <PWADebug />
       <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/pricing" element={<PricingPage />} />
-      <Route path="/signup" element={<SignupPage />} />
-      <Route path="/signup/success" element={<SignupSuccessPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/signup/success" element={<SignupSuccessPage />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppShell />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/organization" element={<OrganizationPage />} />
-          <Route path="/branches" element={<BranchesPage />} />
-          <Route path="/departments" element={<DepartmentsPage />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/patients" element={<PatientsPage />} />
-          <Route path="/patients/:patientId" element={<PatientDetailPage />} />
-          <Route path="/pharmacy/medicines" element={<MedicinesPage />} />
-          <Route path="/pharmacy/suppliers" element={<SuppliersPage />} />
-          <Route path="/pharmacy/purchases" element={<PurchasesPage />} />
-          <Route path="/pharmacy/stock" element={<StockPage />} />
-          <Route path="/pharmacy/queue" element={<PharmacyQueuePage />} />
-          <Route path="/pharmacy/invoices" element={<PharmacyInvoicesPage />} />
-          <Route path="/laboratory/invoices" element={<LabInvoicesPage />} />
-          <Route path="/pharmacy/queue" element={<PharmacyQueuePage />} />
-          <Route path="/pharmacy/invoices" element={<PharmacyInvoicesPage />} />
-          <Route path="/laboratory/invoices" element={<LabInvoicesPage />} />
-          <Route path="/appointments" element={<AppointmentsPage />} />
-          <Route path="/consultation/:encounterId" element={<ConsultationPage />} />
-          <Route path="/admin/prescriptions/:encounterServerId/edit" element={<EditPrescriptionPage />} />
-          <Route path="/roles" element={<RolesPage />} />
-<Route path="/tenants"     element={<PlatformTenantsPage />} />
-          <Route path="/tenants/:tenantId" element={<TenantDetailPage />} />
-          <Route path="/plans"       element={<PlansPage />} />
-          <Route path="/laboratory/tests" element={<LabTestsPage />} />
-          <Route path="/laboratory/orders" element={<LabOrdersPage />} />
-          <Route path="/laboratory/orders/:orderId" element={<LabOrderDetailPage />} />
-          <Route path="/billing/invoices" element={<InvoicesPage />} />
-          <Route path="/billing/invoices/:invoiceId" element={<InvoiceDetailPage />} />
-          <Route path="/ipd/locations" element={<LocationsPage />} />
-          <Route path="/ipd/beds" element={<BedsPage />} />
-          <Route path="/ipd/admissions" element={<AdmissionsPage />} />
-          <Route path="/ipd/admissions/:admissionId" element={<AdmissionDetailPage />} />
-          <Route path="/settings/sessions" element={<SessionsPage />} />
-          <Route path="/settings/pricing"  element={<AdminPricingPage />} />
-          <Route path="/settings/subscription" element={<SubscriptionPage />} />
-          <Route path="*" element={<NotFoundPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppShell />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/organization" element={<OrganizationPage />} />
+            <Route path="/branches" element={<BranchesPage />} />
+            <Route path="/departments" element={<DepartmentsPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/patients" element={<PatientsPage />} />
+            <Route path="/patients/:patientId" element={<PatientDetailPage />} />
+            <Route path="/pharmacy/medicines" element={<MedicinesPage />} />
+            <Route path="/pharmacy/suppliers" element={<SuppliersPage />} />
+            <Route path="/pharmacy/purchases" element={<PurchasesPage />} />
+            <Route path="/pharmacy/stock" element={<StockPage />} />
+            <Route path="/pharmacy/queue" element={<PharmacyQueuePage />} />
+            <Route path="/pharmacy/invoices" element={<PharmacyInvoicesPage />} />
+            <Route path="/laboratory/invoices" element={<LabInvoicesPage />} />
+            <Route path="/appointments" element={<AppointmentsPage />} />
+            <Route path="/consultation/:encounterId" element={<ConsultationPage />} />
+            <Route path="/admin/prescriptions/:encounterServerId/edit" element={<EditPrescriptionPage />} />
+            <Route path="/roles" element={<RolesPage />} />
+            <Route path="/tenants" element={<PlatformTenantsPage />} />
+            <Route path="/tenants/:tenantId" element={<TenantDetailPage />} />
+            <Route path="/plans" element={<PlansPage />} />
+            <Route path="/laboratory/tests" element={<LabTestsPage />} />
+            <Route path="/laboratory/orders" element={<LabOrdersPage />} />
+            <Route path="/laboratory/orders/:orderId" element={<LabOrderDetailPage />} />
+            <Route path="/billing/invoices" element={<InvoicesPage />} />
+            <Route path="/billing/invoices/:invoiceId" element={<InvoiceDetailPage />} />
+            <Route path="/ipd/locations" element={<LocationsPage />} />
+            <Route path="/ipd/beds" element={<BedsPage />} />
+            <Route path="/ipd/admissions" element={<AdmissionsPage />} />
+            <Route path="/ipd/admissions/:admissionId" element={<AdmissionDetailPage />} />
+            <Route path="/settings/sessions" element={<SessionsPage />} />
+            <Route path="/settings/pricing" element={<AdminPricingPage />} />
+            <Route path="/settings/subscription" element={<SubscriptionPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
-      </Route>
-    </Routes>
+      </Routes>
       <InstallPrompt />
     </>
   );

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const opdRepository = {
   async findById(client: SupabaseClient, tenantId: string, id: string) {
@@ -64,7 +64,7 @@ export const opdRepository = {
     return data;
   },
 
-  /** Atomic save — everything in a single RPC call, one transaction. */
+  /** Atomic save â€” everything in a single RPC call, one transaction. */
   async saveEncounterAtomic(client: SupabaseClient, p: {
     encounterId: string;
     tenantId: string;
@@ -108,56 +108,38 @@ export const opdRepository = {
     return data;
   },
 
+  /**
+   * Replace a prescription atomically.
+   *
+   * SECURITY / INTEGRITY:
+   *   The previous version issued delete + insert as separate HTTP calls.
+   *   If the insert failed after the delete succeeded, the prescription
+   *   was permanently lost. This now calls a single Postgres function
+   *   (`replace_prescription`) so the whole thing is one transaction.
+   */
   async updatePrescription(
     client: SupabaseClient,
     tenantId: string,
     encounterId: string,
     prescription: any,
   ) {
-    // Delete existing prescription and items
-    const { data: existing } = await client
-      .from('prescriptions')
-      .select('id')
-      .eq('encounter_id', encounterId)
-      .eq('tenant_id', tenantId)
-      .maybeSingle();
+    const items = (prescription?.items ?? []).map((it: any) => ({
+      medicineName: it.medicineName,
+      dosage: it.dosage ?? null,
+      frequency: it.frequency ?? null,
+      duration: it.duration ?? null,
+      route: it.route ?? null,
+      instructions: it.instructions ?? null,
+      quantity: it.quantity ? Number(it.quantity) : null,
+    }));
 
-    if (existing) {
-      await client.from('prescription_items').delete()
-        .eq('prescription_id', existing.id)
-        .eq('tenant_id', tenantId);
-      await client.from('prescriptions').delete()
-        .eq('id', existing.id)
-        .eq('tenant_id', tenantId);
-    }
-
-    // Insert new prescription if provided
-    if (prescription && prescription.items && prescription.items.length > 0) {
-      const { data: newPresc, error: e1 } = await client
-        .from('prescriptions')
-        .insert({
-          tenant_id: tenantId,
-          encounter_id: encounterId,
-          notes: prescription.notes ?? null,
-        })
-        .select('id')
-        .single();
-      if (e1) throw e1;
-
-      const items = prescription.items.map((it: any) => ({
-        tenant_id: tenantId,
-        prescription_id: newPresc.id,
-        medicine_name: it.medicineName,
-        dosage: it.dosage ?? null,
-        frequency: it.frequency ?? null,
-        duration: it.duration ?? null,
-        route: it.route ?? null,
-        instructions: it.instructions ?? null,
-        quantity: it.quantity ? Number(it.quantity) : null,
-      }));
-
-      const { error: e2 } = await client.from('prescription_items').insert(items);
-      if (e2) throw e2;
-    }
+    const { error } = await client.rpc('replace_prescription', {
+      p_tenant_id:    tenantId,
+      p_encounter_id: encounterId,
+      p_notes:        prescription?.notes ?? null,
+      p_items:        items,
+    });
+    if (error) throw error;
   },
 };
+

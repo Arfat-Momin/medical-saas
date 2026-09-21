@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
-import { requirePermission } from '../../middleware/permissions.js';
+import { requirePermission, requireRole } from '../../middleware/permissions.js';
 import { getAccessToken } from '../../middleware/auth.js';
 import { PERMISSIONS } from '@medical/shared';
 import {
@@ -78,5 +78,16 @@ appointmentsRouter.patch(
     const { status } = updateAppointmentStatusSchema.parse(req.body);
     const expected = (req.headers['x-expected-updated-at'] as string | undefined) || undefined;
     res.json(await appointmentsService.updateStatus(req.auth!, getAccessToken(req), req.params.id!, status, expected));
+  }),
+);
+
+// Hard delete is forbidden for medical data. This soft-deletes the appointment
+// and is intentionally restricted to HOSPITAL_ADMIN.
+appointmentsRouter.delete(
+  '/:id',
+  requireRole('HOSPITAL_ADMIN'),
+  requirePermission(PERMISSIONS.APPOINTMENT_MANAGE),
+  asyncHandler(async (req, res) => {
+    res.json(await appointmentsService.softDelete(req.auth!, getAccessToken(req), req.params.id!));
   }),
 );

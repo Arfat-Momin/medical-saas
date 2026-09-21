@@ -65,6 +65,7 @@ export function SubscriptionPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const canRenew = can(PERMISSIONS.BILLING_MANAGE);
 
@@ -131,6 +132,8 @@ export function SubscriptionPage() {
             await current.refetch();
             setPickerOpen(false);
             setBusy(false);
+            setSuccess('Renewal successful. Your plan has been extended.');
+            setTimeout(() => setSuccess(null), 8000);
           } catch (e: any) {
             setError(e?.message ?? 'Verification failed');
             setBusy(false);
@@ -191,7 +194,7 @@ export function SubscriptionPage() {
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => handleUpgrade(p.code)}
+                    onClick={() => handleUpgrade(p.id)}
                     disabled={busy || !canRenew}
                     className="rounded-lg border border-slate-200 p-4 text-left transition hover:border-brand-400 hover:bg-brand-50 disabled:opacity-50"
                   >
@@ -250,6 +253,12 @@ export function SubscriptionPage() {
               </div>
             </div>
           </Alert>
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-4">
+          <Alert tone="success">{success}</Alert>
         </div>
       )}
 
@@ -356,7 +365,7 @@ export function SubscriptionPage() {
                   <span className="font-mono text-base font-semibold text-slate-900">
                     {money(p.price_paise)}
                   </span>
-                  <Button onClick={() => handleUpgrade(p.code)} disabled={busy}>
+                  <Button onClick={() => handleUpgrade(p.id)} disabled={busy}>
                     Choose <ArrowRight size={14} />
                   </Button>
                 </div>

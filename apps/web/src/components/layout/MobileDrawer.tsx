@@ -58,7 +58,7 @@ export function MobileDrawer({ open, onClose }: Props) {
             </div>
             <span className="font-bold tracking-tight text-ink-900">MedSaaS</span>
           </div>
-          <button onClick={onClose} className="glass-tap rounded-xl p-1.5 text-ink-500 hover:bg-white/60" aria-label="Close menu">
+          <button onClick={onClose} className="glass-tap rounded-xl p-2.5 text-ink-500 hover:bg-white/60" aria-label="Close menu">
             <X size={18} />
           </button>
         </div>

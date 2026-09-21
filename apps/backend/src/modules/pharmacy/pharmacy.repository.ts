@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const pharmacyRepository = {
   // ---------------- MEDICINES ----------------
@@ -12,7 +12,7 @@ export const pharmacyRepository = {
       .order('name');
     if (opts.activeOnly) q = q.eq('is_active', true);
     if (opts.search) {
-      const s = opts.search.replace(/[,%]/g, '');
+      const s = opts.search.replace(/[,%_]/g, '');
       q = q.or(`name.ilike.%${s}%,generic_name.ilike.%${s}%,code.ilike.%${s}%`);
     }
     const { data, error, count } = await q.range(from, to);

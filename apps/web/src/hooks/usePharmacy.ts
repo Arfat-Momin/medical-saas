@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pharmacyRepository as repo } from '@/repositories/pharmacy.repository';
 import { medicinesLocalRepository } from '@/repositories/offline.repositories';
-import { db, meta } from '@/db';
-import { api } from '@/lib/api';
+import { db } from '@/db';
+import { syncEngine } from '@/sync/engine';
 import { useAuthStore } from '@/stores/auth.store';
 
 const MED  = ['pharmacy', 'medicines'];
@@ -16,13 +16,13 @@ const EXP  = ['pharmacy', 'expiring'];
 /**
  * Tenant-scoped medicines list.
  *
- * - Gated on tenantId; the queryKey includes tenantId so switching
- *   tenants refetches automatically.
- * - The pull is scoped to the current tenant (previously `db.medicines.count()`
- *   counted every tenant and skipped the pull when the wrong tenant's rows
- *   were present).
- * - Pulls /sync/pull?entity=medicines directly rather than relying on
- *   syncEngine.pull(), which does not cover this entity.
+ * Reads from Dexie. Refresh behaviour:
+ *   - local empty  -> await a fresh pull so the first render has data
+ *   - local present -> fire-and-forget refresh (React Query re-renders
+ *     when the cache updates)
+ *
+ * The previous version only pulled when localCount === 0, which meant
+ * newly-created medicines on the server never appeared in the list.
  */
 export function useMedicines(params: {
   search?: string;
@@ -46,25 +46,13 @@ export function useMedicines(params: {
       }
 
       const online = typeof navigator !== 'undefined' && navigator.onLine !== false;
-      const localCount = await db.medicines
-        .where('tenant_id')
-        .equals(tenantId)
-        .count();
-
-      if (online && localCount === 0) {
-        try {
-          const cursorKey = `last_pull_at:${tenantId}:medicines`;
-          const since = await meta.get(cursorKey);
-          const url = `/sync/pull?entity=medicines${
-            since ? `&since=${encodeURIComponent(since)}` : ''
-          }`;
-          const res = await api.get<{ rows: any[]; serverTime: string }>(url);
-          for (const row of res.rows) {
-            await medicinesLocalRepository.upsertFromServer(row);
-          }
-          await meta.set(cursorKey, res.serverTime);
-        } catch (err) {
-          console.warn('[useMedicines] pull failed', err);
+      if (online) {
+        const localCount = await db.medicines
+          .where('tenant_id').equals(tenantId).count();
+        if (localCount === 0) {
+          try { await syncEngine.pullEntity('medicines'); } catch { /* best effort */ }
+        } else {
+          void syncEngine.pullEntity('medicines').catch(() => {});
         }
       }
 
@@ -78,7 +66,11 @@ export function useCreateMedicine() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: repo.createMedicine,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: MED }); },
+    onSuccess: async () => {
+      // Pull the newly-created row into Dexie before re-reading.
+      try { await syncEngine.pullEntity('medicines'); } catch { /* best effort */ }
+      qc.invalidateQueries({ queryKey: MED });
+    },
   });
 }
 
@@ -86,7 +78,10 @@ export function useUpdateMedicine() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: any }) => repo.updateMedicine(id, patch),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: MED }); },
+    onSuccess: async () => {
+      try { await syncEngine.pullEntity('medicines'); } catch { /* best effort */ }
+      qc.invalidateQueries({ queryKey: MED });
+    },
   });
 }
 

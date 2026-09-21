@@ -193,6 +193,26 @@ export const appointmentsService = {
     return encounter;
   },
 
+  async softDelete(auth: AuthContext, token: string, id: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+
+    const before = await appointmentsRepository.findById(client, auth.tenantId, id);
+    if (!before) throw NotFound('Appointment not found');
+
+    await appointmentsRepository.softDelete(client, auth.tenantId, id);
+
+    await audit({
+      actorUserId: auth.userId,
+      action: 'APPOINTMENT_SOFT_DELETED',
+      entity: 'appointments',
+      entityId: id,
+      before,
+    });
+
+    return { success: true };
+  },
+
   async updateStatus(auth: AuthContext, token: string, id: string, status: string, req_expectedUpdatedAt?: string) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const client = supabaseForUser(token);

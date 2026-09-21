@@ -11,7 +11,7 @@ export function Chip({
     )}>
       {children}
       {onRemove && (
-        <button type="button" onClick={onRemove} className="rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Remove">
+        <button type="button" onClick={onRemove} className="rounded-full p-1.5 sm:p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Remove">
           <X size={11} />
         </button>
       )}

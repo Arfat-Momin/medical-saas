@@ -1,4 +1,5 @@
-﻿import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '../../config/logger.js';
 
 export const subscriptionsRepository = {
   async listActivePlans(client: SupabaseClient) {
@@ -142,9 +143,9 @@ export const subscriptionsRepository = {
 
       // Visible in the backend console so we can see exactly what
       // Supabase returns on each attempt.
-      // eslint-disable-next-line no-console
-      console.log(
-        `[subs-repo] tenant=${tenantId} attempt=${attempt} ms=${ms} status=${status} ${statusText} rows=${rowCount} err=${error?.code ?? '-'} ${error?.message ?? ''}`,
+      logger.debug(
+        { tenantId, attempt, ms, status, statusText, rowCount, errCode: error?.code ?? null, errMsg: error?.message ?? null },
+        'subs-repo findLatestSubscriptionForTenant',
       );
 
       if (error) {
@@ -219,6 +220,28 @@ export const subscriptionsRepository = {
     return data;
   },
 
+  /**
+   * Extend an existing subscription in place.
+   *
+   * The `subscriptions_before_insert` trigger enforces one active
+   * subscription per tenant, so renewal MUST update the existing row
+   * rather than insert a new one.
+   */
+  async extendSubscription(
+    client: SupabaseClient,
+    subscriptionId: string,
+    patch: { plan_id: string; status: string; ends_at: string; is_free_tier: boolean },
+  ) {
+    const { data, error } = await client
+      .from('subscriptions')
+      .update(patch)
+      .eq('id', subscriptionId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
   async createSubscriptionPayment(client: SupabaseClient, payload: Record<string, unknown>) {
     const { data, error } = await client.from('subscription_payments').insert(payload).select('*').single();
     if (error) throw error;
@@ -240,6 +263,7 @@ export const subscriptionsRepository = {
     await client.from('tenants').update({ status: 'ACTIVE' }).eq('id', tenantId);
   },
 };
+
 
 
 

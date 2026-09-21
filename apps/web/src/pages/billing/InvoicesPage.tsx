@@ -100,7 +100,7 @@ export function InvoicesPage() {
       <PageHeader title="Invoices" subtitle="Patient billing - internal (no online gateway)"
         action={canManage && <Button onClick={() => setOpen(true)}><Plus size={16} /> New invoice</Button>} />
 
-      <div className="mb-4 w-48">
+      <div className="mb-4 w-full sm:w-48">
         <Select label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">All</option>
           <option value="UNPAID">Unpaid</option>

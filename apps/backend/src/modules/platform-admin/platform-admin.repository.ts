@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 const TENANT_SELECT = `
   id, tenant_code, name, slug, type, status, contact_email, contact_phone,
@@ -16,7 +16,7 @@ export const platformAdminRepository = {
 
     if (opts.status) q = q.eq('status', opts.status);
     if (opts.search) {
-      const s = opts.search.replace(/[,%]/g, '');
+      const s = opts.search.replace(/[,%_]/g, '');
       q = q.or(`name.ilike.%${s}%,tenant_code.ilike.%${s}%,slug.ilike.%${s}%`);
     }
 

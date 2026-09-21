@@ -90,6 +90,26 @@ export const patientsService = {
     return patient;
   },
 
+  async softDelete(auth: AuthContext, token: string, id: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+
+    const before = await patientsRepository.findById(client, auth.tenantId, id);
+    if (!before) throw NotFound('Patient not found');
+
+    await patientsRepository.softDelete(client, auth.tenantId, id);
+
+    await audit({
+      actorUserId: auth.userId,
+      action: 'PATIENT_SOFT_DELETED',
+      entity: 'patients',
+      entityId: id,
+      before,
+    });
+
+    return { success: true };
+  },
+
   async update(auth: AuthContext, token: string, id: string, patch: UpdatePatientInput, req_expectedUpdatedAt?: string) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const client = supabaseForUser(token);

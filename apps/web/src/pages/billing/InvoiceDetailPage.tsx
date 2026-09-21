@@ -169,7 +169,7 @@ export function InvoiceDetailPage() {
   return (
     <>
       {/* ─── Toolbar ───────────────────────────────────────────── */}
-      <div className="mb-4 flex items-center justify-between print:hidden">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link to="/billing/invoices" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline">
           <ArrowLeft size={14} /> Back to invoices
         </Link>

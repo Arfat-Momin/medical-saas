@@ -36,7 +36,7 @@ export function Topbar({ onOpenMenu }: Props) {
         <div className="flex min-w-0 items-center gap-2">
           <button
             onClick={onOpenMenu}
-            className="glass-tap rounded-xl p-2 text-ink-600 hover:bg-white/60 md:hidden"
+            className="glass-tap rounded-xl p-2.5 text-ink-600 hover:bg-white/60 md:hidden"
             aria-label="Open menu"
           >
             <Menu size={20} />

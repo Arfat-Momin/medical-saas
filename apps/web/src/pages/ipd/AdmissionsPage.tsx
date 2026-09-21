@@ -72,7 +72,7 @@ export function AdmissionsPage() {
         action={canManage && <Button onClick={() => setOpen(true)}><Plus size={16} /> Admit patient</Button>} />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <Select label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All</option>
             <option value="ADMITTED">Currently admitted</option>
@@ -145,9 +145,16 @@ export function AdmissionsPage() {
             <option value="">
               {patients.isLoading ? 'Loading...' : patients.isError ? 'Failed to load' : '- select patient -'}
             </option>
-            {patients.data?.rows.map((p) => (
-              <option key={p.id} value={p.id}>{p.uhid} - {p.full_name}</option>
-            ))}
+            {patients.data?.rows.map((p) => {
+              // HF-1: submit the SERVER patient id, not the local Dexie id.
+              const serverId = p.server_id ?? '';
+              const isSyncing = !serverId;
+              return (
+                <option key={p.id} value={serverId} disabled={isSyncing}>
+                  {p.uhid} - {p.full_name}{isSyncing ? ' (syncing…)' : ''}
+                </option>
+              );
+            })}
           </Select>
 
           <Select label="Admitting doctor *" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>

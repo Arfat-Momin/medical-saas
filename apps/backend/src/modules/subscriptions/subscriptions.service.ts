@@ -1,4 +1,4 @@
-﻿import crypto from 'node:crypto';
+import crypto from 'node:crypto';
 import { supabaseAdmin } from '../../config/supabase.js';
 import { env } from '../../config/env.js';
 import { subscriptionsRepository as repo } from './subscriptions.repository.js';
@@ -478,21 +478,22 @@ export const subscriptionsService = {
     if (plan.is_free || !plan.is_renewable) throw BadRequest('Plan cannot be renewed');
 
     const prev = await repo.findLatestSubscriptionForTenant(supabaseAdmin, fresh.tenant_id);
+    if (!prev) throw NotFound('No existing subscription to renew');
+
     const now = Date.now();
-    const prevEndsMs = prev?.ends_at ? new Date(prev.ends_at).getTime() : 0;
+    const prevEndsMs = prev.ends_at ? new Date(prev.ends_at).getTime() : 0;
     const startMs = Math.max(now, prevEndsMs);
     const periodMs = plan.billing_cycle === 'YEARLY' ? 365 * 86400000 : 30 * 86400000;
     const endsAt = new Date(startMs + periodMs).toISOString();
-    const startsAt = new Date(startMs).toISOString();
 
-    const newSub = await repo.createSubscription(supabaseAdmin, {
-      tenant_id: fresh.tenant_id,
+    // The `subscriptions_before_insert` trigger enforces one active
+    // subscription per tenant. Renewal must therefore extend the
+    // existing subscription in place - not insert a new row.
+    const newSub = await repo.extendSubscription(supabaseAdmin, prev.id, {
       plan_id: plan.id,
       status: 'ACTIVE',
-      starts_at: startsAt,
       ends_at: endsAt,
       is_free_tier: false,
-      renewal_of_subscription_id: prev?.id ?? null,
     });
 
     try {

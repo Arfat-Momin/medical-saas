@@ -7,6 +7,8 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { requestId } from './middleware/requestId.js';
 import { authenticate } from './middleware/auth.js';
+import { globalApiLimiter } from './middleware/rateLimit.js';
+import { supabaseAdmin } from './config/supabase.js';
 import { requireTenant, requirePlatformAdmin } from './middleware/tenantContext.js';
 import { idempotent } from './middleware/idempotency.js';
 import { auditContextMiddleware } from './middleware/audit.js';
@@ -42,7 +44,12 @@ export function createApp() {
   app.use(requestId);
   app.use(pinoHttp({ logger, genReqId: (req) => (req as any).id }));
   app.use(helmet());
-  app.use(cors({ origin: env.CORS_ORIGIN.split(','), credentials: true }));
+  const corsOrigins = env.CORS_ORIGIN
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+  app.use(cors({ origin: corsOrigins, credentials: true }));
 
   app.use(
     '/api/v1/subscriptions/webhook',
@@ -52,9 +59,58 @@ export function createApp() {
 
   app.use(express.json({ limit: '2mb' }));
 
-  app.get('/health', (_req, res) =>
-    res.json({ status: 'ok', service: 'medical-saas-backend', ts: new Date().toISOString() }),
-  );
+  // DB-aware health check with a 5-second cache so uptime monitors don't
+  // hammer Supabase. Returns 200 when the DB is reachable, 503 otherwise,
+  // so orchestrators can actually tell the difference.
+  let lastHealthAt = 0;
+  let lastHealthStatus: 'ok' | 'degraded' = 'ok';
+  let lastHealthError: string | null = null;
+
+  app.get('/health', async (_req, res) => {
+    const ts = new Date().toISOString();
+    const now = Date.now();
+
+    if (now - lastHealthAt < 5000) {
+      return res.status(lastHealthStatus === 'ok' ? 200 : 503).json({
+        status: lastHealthStatus,
+        service: 'medical-saas-backend',
+        ts,
+        ...(lastHealthError ? { error: lastHealthError } : {}),
+      });
+    }
+
+    lastHealthAt = now;
+    try {
+      const { error } = await supabaseAdmin
+        .from('tenants')
+        .select('id', { count: 'exact', head: true })
+        .limit(1);
+
+      if (error) {
+        lastHealthStatus = 'degraded';
+        lastHealthError = error.message;
+        return res.status(503).json({
+          status: 'degraded',
+          service: 'medical-saas-backend',
+          ts,
+          error: error.message,
+        });
+      }
+
+      lastHealthStatus = 'ok';
+      lastHealthError = null;
+      return res.json({ status: 'ok', service: 'medical-saas-backend', ts });
+    } catch (e: any) {
+      lastHealthStatus = 'degraded';
+      lastHealthError = e?.message ?? 'unknown error';
+      return res.status(503).json({
+        status: 'degraded',
+        service: 'medical-saas-backend',
+        ts,
+        error: lastHealthError,
+      });
+    }
+  });
 
   const api = express.Router();
 
@@ -62,6 +118,7 @@ export function createApp() {
   api.use('/subscriptions', subscriptionsRouter);
 
   api.use(authenticate);
+  api.use(globalApiLimiter);
   api.use(auditContextMiddleware);
   api.use(idempotent);
 

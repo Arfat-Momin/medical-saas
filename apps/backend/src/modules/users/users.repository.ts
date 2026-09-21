@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const usersRepository = {
     async list(
@@ -6,9 +6,14 @@ export const usersRepository = {
         tenantId: string,
         opts: { page: number; pageSize: number; branchId?: string; roleCode?: string; search?: string },
     ) {
-        const from = (opts.page - 1) * opts.pageSize;
-        const to = from + opts.pageSize - 1;
-
+        // SECURITY / CORRECTNESS:
+        //   Filtering must happen BEFORE computing `total` and BEFORE
+        //   pagination. The previous version applied roleCode/search in
+        //   JavaScript *after* pagination, then returned the unfiltered
+        //   DB count as `total` - which made the "Next" button jump to
+        //   empty pages. We now fetch all rows for the tenant (bounded
+        //   by branchId if provided), filter in JS, then paginate and
+        //   set total to the filtered length.
         let q = client
             .from('memberships')
             .select(
@@ -16,31 +21,35 @@ export const usersRepository = {
          users:user_id ( id, email, full_name, phone, is_active, consultation_fee ),
          roles:role_id ( id, code, name ),
          branches:branch_id ( id, name, branch_code )`,
-                { count: 'exact' },
             )
             .eq('tenant_id', tenantId)
             .eq('is_active', true);
 
         if (opts.branchId) q = q.eq('branch_id', opts.branchId);
 
-        const { data, error, count } = await q.range(from, to);
+        const { data, error } = await q;
         if (error) throw error;
 
-        let rows = data ?? [];
+        let allRows = data ?? [];
 
         if (opts.roleCode) {
-            rows = rows.filter((r: any) => r.roles?.code === opts.roleCode);
+            allRows = allRows.filter((r: any) => r.roles?.code === opts.roleCode);
         }
         if (opts.search) {
             const s = opts.search.toLowerCase();
-            rows = rows.filter(
+            allRows = allRows.filter(
                 (r: any) =>
                     r.users?.full_name?.toLowerCase().includes(s) ||
                     r.users?.email?.toLowerCase().includes(s),
             );
         }
 
-        return { rows, total: count ?? rows.length, page: opts.page, pageSize: opts.pageSize };
+        const total = allRows.length;
+        const from = (opts.page - 1) * opts.pageSize;
+        const to = from + opts.pageSize;
+        const rows = allRows.slice(from, to);
+
+        return { rows, total, page: opts.page, pageSize: opts.pageSize };
     },
 
     async findByEmail(client: SupabaseClient, email: string) {

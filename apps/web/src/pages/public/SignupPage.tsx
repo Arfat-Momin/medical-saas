@@ -80,7 +80,7 @@ export function SignupPage() {
         key: res.razorpayKeyId, amount: res.amount, currency: res.currency,
         name: 'Medical SaaS', description: `${res.plan.name} subscription`,
         order_id: res.orderId,
-        prefill: { name: values.contactName, email: values.email, contact: values.contactPhone },
+        prefill: { name: values.contactName, email: values.email, contact: values.contactPhone || undefined },
         theme: { color: '#3b5bff' },
         handler: async (response: any) => {
           try {
@@ -152,7 +152,7 @@ export function SignupPage() {
                         {active && <span className="h-4 w-4 rounded-full bg-brand-500 ring-4 ring-brand-500/20" />}
                       </div>
                       <p className="mt-1 font-mono text-2xs text-slate-500">
-                        ???{(p.price_paise / 100).toFixed(0)}/{p.billing_cycle === 'MONTHLY' ? 'mo' : 'yr'}
+                        ₹{(p.price_paise / 100).toFixed(0)}/{p.billing_cycle === 'MONTHLY' ? 'mo' : 'yr'}
                       </p>
                     </button>
                   );

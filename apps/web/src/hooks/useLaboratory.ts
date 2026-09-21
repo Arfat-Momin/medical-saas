@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { laboratoryRepository as repo } from '@/repositories/laboratory.repository';
 import { labTestsLocalRepository } from '@/repositories/offline.repositories';
-import { db, meta } from '@/db';
-import { api } from '@/lib/api';
+import { db } from '@/db';
+import { syncEngine } from '@/sync/engine';
 import { useAuthStore } from '@/stores/auth.store';
 
 const TESTS  = ['lab', 'tests'];
@@ -11,9 +11,8 @@ const ORDERS = ['lab', 'orders'];
 /**
  * Tenant-scoped lab-test catalog.
  *
- * - Gated on tenantId; queryKey includes tenantId.
- * - Pulls /sync/pull?entity=lab_tests directly (backend entity name).
- * - Counts rows for the current tenant only (was counting every tenant).
+ * Same refresh policy as useMedicines: await the pull only when the
+ * local cache is empty, otherwise background-refresh.
  */
 export function useLabTests(params: {
   search?: string;
@@ -37,25 +36,13 @@ export function useLabTests(params: {
       }
 
       const online = typeof navigator !== 'undefined' && navigator.onLine !== false;
-      const localCount = await db.labTests
-        .where('tenant_id')
-        .equals(tenantId)
-        .count();
-
-      if (online && localCount === 0) {
-        try {
-          const cursorKey = `last_pull_at:${tenantId}:lab_tests`;
-          const since = await meta.get(cursorKey);
-          const url = `/sync/pull?entity=lab_tests${
-            since ? `&since=${encodeURIComponent(since)}` : ''
-          }`;
-          const res = await api.get<{ rows: any[]; serverTime: string }>(url);
-          for (const row of res.rows) {
-            await labTestsLocalRepository.upsertFromServer(row);
-          }
-          await meta.set(cursorKey, res.serverTime);
-        } catch (err) {
-          console.warn('[useLabTests] pull failed', err);
+      if (online) {
+        const localCount = await db.labTests
+          .where('tenant_id').equals(tenantId).count();
+        if (localCount === 0) {
+          try { await syncEngine.pullEntity('lab_tests'); } catch { /* best effort */ }
+        } else {
+          void syncEngine.pullEntity('lab_tests').catch(() => {});
         }
       }
 
@@ -69,7 +56,10 @@ export function useCreateLabTest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: repo.createTest,
-    onSuccess: () => qc.invalidateQueries({ queryKey: TESTS }),
+    onSuccess: async () => {
+      try { await syncEngine.pullEntity('lab_tests'); } catch { /* best effort */ }
+      qc.invalidateQueries({ queryKey: TESTS });
+    },
   });
 }
 
@@ -77,7 +67,10 @@ export function useUpdateLabTest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: any }) => repo.updateTest(id, patch),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TESTS }),
+    onSuccess: async () => {
+      try { await syncEngine.pullEntity('lab_tests'); } catch { /* best effort */ }
+      qc.invalidateQueries({ queryKey: TESTS });
+    },
   });
 }
 

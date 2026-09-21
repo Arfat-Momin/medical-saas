@@ -25,6 +25,7 @@ export const appointmentsRepository = {
       .from('appointments')
       .select(SELECT, { count: 'exact' })
       .eq('tenant_id', tenantId)
+      .is('deleted_at', null)
       .order('appointment_date', { ascending: false })
       .order('queue_token', { ascending: true, nullsFirst: false });
 
@@ -44,6 +45,7 @@ export const appointmentsRepository = {
       .select(SELECT)
       .eq('tenant_id', tenantId)
       .eq('id', id)
+      .is('deleted_at', null)
       .maybeSingle();
     if (error) throw error;
     return data;
@@ -65,7 +67,29 @@ export const appointmentsRepository = {
       .update(patch)
       .eq('tenant_id', tenantId)
       .eq('id', id)
+      .is('deleted_at', null)
       .select(SELECT)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Soft-delete an appointment. Same policy as patients: the row stays in
+   * the database with a deleted_at timestamp; every SELECT filters it out.
+   * Route-level guard: HOSPITAL_ADMIN only.
+   */
+  async softDelete(client: SupabaseClient, tenantId: string, id: string) {
+    // Set updated_at too so the sync pull cursor (gt updated_at) picks this
+    // row up and other devices can purge their local copy.
+    const now = new Date().toISOString();
+    const { data, error } = await client
+      .from('appointments')
+      .update({ deleted_at: now, updated_at: now })
+      .eq('tenant_id', tenantId)
+      .eq('id', id)
+      .is('deleted_at', null)
+      .select('id')
       .single();
     if (error) throw error;
     return data;

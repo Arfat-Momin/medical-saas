@@ -53,6 +53,7 @@ export function PatientsPage() {
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
   const [pendingValues, setPendingValues] = useState<FormValues | null>(null);
   const [editTarget, setEditTarget] = useState<Patient | null>(null);
+  const [reviewingDuplicates, setReviewingDuplicates] = useState(false);
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({ defaultValues: emptyForm });
   const canCreate = can(PERMISSIONS.PATIENT_CREATE);
@@ -288,7 +289,7 @@ export function PatientsPage() {
                 ))}
               </ul>
               <div className="mt-3 flex gap-2">
-                <Button type="button" size="sm" variant="secondary" onClick={() => { setDuplicates(null); setPendingValues(null); }}>
+                <Button type="button" size="sm" variant="secondary" onClick={() => setReviewingDuplicates(true)}>
                   Review details
                 </Button>
                 <Button type="button" size="sm" variant="danger" onClick={() => commitCreate(pendingValues, true)}>
@@ -318,6 +319,86 @@ export function PatientsPage() {
             <Input label="Medical history" className="sm:col-span-2" placeholder="Diabetes, hypertension…" {...register('medicalHistory')} />
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={reviewingDuplicates && !!duplicates}
+        onClose={() => setReviewingDuplicates(false)}
+        title="Possible duplicate patients"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReviewingDuplicates(false)}>
+              Back to form
+            </Button>
+            {pendingValues && (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setReviewingDuplicates(false);
+                  void commitCreate(pendingValues, true);
+                }}
+              >
+                Register anyway
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Alert tone="warning">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <p className="text-sm">
+                We found existing patients with matching details. Review them
+                before registering a new patient to avoid creating a duplicate record.
+              </p>
+            </div>
+          </Alert>
+
+          {(duplicates ?? []).map((d) => (
+            <div key={d.id} className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-base font-semibold text-slate-900">
+                      {d.full_name}
+                    </p>
+                    <Badge tone="yellow">
+                      {d.reason === 'same_mobile' ? 'Same mobile' : 'Same name & DOB'}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 font-mono text-xs text-brand-700">{d.uhid}</p>
+                </div>
+              </div>
+
+              <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+                <div>
+                  <dt className="text-slate-500">Mobile</dt>
+                  <dd className="text-slate-800">{d.mobile ?? '\u2014'}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">Date of birth</dt>
+                  <dd className="text-slate-800">{d.date_of_birth ?? '\u2014'}</dd>
+                </div>
+              </dl>
+
+              <div className="mt-3 flex justify-end border-t border-amber-200 pt-3">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setReviewingDuplicates(false);
+                    closeModal();
+                    navigate(`/patients/${d.id}`);
+                  }}
+                >
+                  View full profile
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       </Modal>
 
       <EditPatientModal

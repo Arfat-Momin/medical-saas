@@ -48,3 +48,9 @@ _fix-backup-*
 dist/
 apps/web/dist/
 apps/backend/dist/
+
+# Batch fix backups
+.batch*-backup/
+.hf*-backup/
+
+.batch4-backup/

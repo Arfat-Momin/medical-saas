@@ -16,9 +16,9 @@ const variants = {
   danger:    'bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800',
 };
 const sizes = {
-  sm: 'h-9 px-3 text-sm gap-1.5 rounded-md',
-  md: 'h-10 px-4 text-base gap-2 rounded-md',
-  lg: 'h-11 px-5 text-md gap-2 rounded-lg',
+  sm: 'h-11 sm:h-9 px-3 text-sm gap-1.5 rounded-md',
+  md: 'h-11 sm:h-10 px-4 text-base gap-2 rounded-md',
+  lg: 'h-12 sm:h-11 px-5 text-md gap-2 rounded-lg',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(

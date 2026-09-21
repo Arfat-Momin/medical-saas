@@ -9,7 +9,7 @@ export function BottomTabBar() {
 
   return (
     <nav
-      className="glass-strong fixed inset-x-3 bottom-3 z-30 flex rounded-2xl safe-b md:hidden"
+      className="glass-strong mobile-tabbar fixed inset-x-3 z-30 flex rounded-2xl md:hidden"
       aria-label="Primary"
     >
       {mobileTabs.map(({ to, label, icon: Icon }) => (
@@ -18,7 +18,7 @@ export function BottomTabBar() {
           to={to}
           className={({ isActive }) =>
             cn(
-              'glass-tap flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-2xs font-medium transition-colors',
+              'glass-tap flex flex-1 flex-col items-center justify-center gap-0.5 py-3 text-2xs font-medium transition-colors',
               isActive ? 'text-brand-700' : 'text-ink-500',
             )
           }

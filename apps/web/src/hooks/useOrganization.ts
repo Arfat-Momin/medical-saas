@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizationsRepository, type UpdateOrganizationInput } from '@/repositories/organizations.repository';
 import { organizationLocalRepository } from '@/repositories/offline.repositories';
-import { db, meta } from '@/db';
-import { api } from '@/lib/api';
+import { syncEngine } from '@/sync/engine';
 import { useAuthStore } from '@/stores/auth.store';
 
 const KEY = ['organization'];
@@ -10,11 +9,9 @@ const KEY = ['organization'];
 /**
  * Reads the org from Dexie, scoped to the caller's tenant.
  *
- * - Waits for tenantId to be resolved (otherwise it caches an empty
- *   result and never refetches when the tenant arrives).
- * - Includes tenantId in the queryKey so switching tenant refetches.
- * - If the local cache is empty and we're online, pulls
- *   /sync/pull?entity=organization directly, upserts, and re-reads.
+ * Refresh policy: first mount pulls synchronously if the cache is empty;
+ * subsequent mounts background-refresh so edits made on other devices
+ * appear without a manual reload.
  */
 export function useOrganization() {
   const tenantId = useAuthStore((s) => s.tenantId);
@@ -29,20 +26,9 @@ export function useOrganization() {
       const local = await organizationLocalRepository.get();
 
       if (!local && online) {
-        try {
-          const cursorKey = `last_pull_at:${tenantId}:organization`;
-          const since = await meta.get(cursorKey);
-          const url = `/sync/pull?entity=organization${
-            since ? `&since=${encodeURIComponent(since)}` : ''
-          }`;
-          const res = await api.get<{ rows: any[]; serverTime: string }>(url);
-          for (const row of res.rows) {
-            await organizationLocalRepository.upsertFromServer(row);
-          }
-          await meta.set(cursorKey, res.serverTime);
-        } catch (err) {
-          console.warn('[useOrganization] pull failed', err);
-        }
+        try { await syncEngine.pullEntity('organization'); } catch { /* best effort */ }
+      } else if (online) {
+        void syncEngine.pullEntity('organization').catch(() => {});
       }
 
       return organizationLocalRepository.get();
@@ -55,7 +41,9 @@ export function useUpdateOrganization() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: UpdateOrganizationInput) => organizationsRepository.updateMine(patch),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Re-read the server's canonical copy before invalidating.
+      try { await syncEngine.pullEntity('organization'); } catch { /* best effort */ }
       qc.invalidateQueries({ queryKey: KEY });
     },
   });

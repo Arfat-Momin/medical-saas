@@ -29,7 +29,7 @@ export function TenantsPage() {
       <PageHeader title="Tenants" subtitle="Hospitals and clinics registered on the platform" />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="w-72">
+        <div className="w-full sm:w-72">
           <Input
             placeholder="Search by name, code or slug"
             leftIcon={<Search size={14} />}
@@ -37,7 +37,7 @@ export function TenantsPage() {
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <Select label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All statuses</option>
             <option value="TRIAL">Trial</option>

@@ -64,29 +64,17 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         ignoreURLParametersMatching: [/^v$/, /^t$/, /^utm_/, /^fbclid$/],
 
-        // Runtime caching for API GET requests
-        runtimeCaching: [
-          {
-            // Match BOTH relative (/api/v1/...) and absolute URLs
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/v1/'),
-            handler: 'NetworkFirst',
-            method: 'GET',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 3,
-              expiration: {
-                maxEntries: 500,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-        ],
+        // PRIVACY / SECURITY:
+        //   Do NOT cache any /api/v1/ response at the service-worker
+        //   level. The previous config kept every GET (patients,
+        //   invoices, prescriptions) in Cache Storage for 7 days, which
+        //   left PHI sitting on shared devices. The app already has a
+        //   purpose-built offline layer (Dexie + sync engine) so the
+        //   SW cache adds no offline capability - only risk.
+        runtimeCaching: [],
 
-        // Increase limit ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â the SPA bundle is bigger than the default
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
+        // Increase limit ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the SPA bundle is bigger than the default
+        // The SPA bundle is bigger than Workbox's default 2 MB limit.
 
         // Skip waiting so updates activate promptly
         skipWaiting: true,

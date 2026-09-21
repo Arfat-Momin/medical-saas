@@ -275,12 +275,34 @@ function DispenseModal({
 
   function addMedicineToRows(med: { id: string; name: string }) {
     setRows((prev) => {
-      const existing = prev.find((r) => r.medicineId === med.id);
-      if (existing) {
-        return prev.map((r) =>
-          r.medicineId === med.id ? { ...r, qty: r.qty + 1 } : r,
+      // 1. Exact match by medicineId -> bump the quantity on that row.
+      const byId = prev.findIndex((r) => r.medicineId === med.id);
+      if (byId !== -1) {
+        return prev.map((r, i) =>
+          i === byId ? { ...r, qty: r.qty + 1 } : r,
         );
       }
+
+      // 2. Match an UNMATCHED prescribed row by name (case-insensitive).
+      //    This is the common case: the prescription says
+      //    "Paracetamol 500mg", the scanner reads the same medicine,
+      //    and the user expects the row to be filled in - not a new
+      //    duplicate row to appear. Previously this appended, which
+      //    left the original prescribed row unmatched and made the
+      //    Confirm step fail with "Select a medicine for all rows".
+      const medName = med.name.trim().toLowerCase();
+      const byName = prev.findIndex(
+        (r) =>
+          !r.medicineId &&
+          r.medicineName.trim().toLowerCase() === medName,
+      );
+      if (byName !== -1) {
+        return prev.map((r, i) =>
+          i === byName ? { ...r, medicineId: med.id } : r,
+        );
+      }
+
+      // 3. Genuinely new medicine (not in the prescription) -> append.
       return [
         ...prev,
         {
@@ -399,15 +421,56 @@ function DispenseModal({
         </>
       }
     >
-      <div className="space-y-4">
-        {/* Barcode Scanner */}
-        {item && (
-          <form onSubmit={handleBarcodeSubmit} className="mb-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+      <div className="space-y-5">
+        {/* Doctor's prescription - read-only reference */}
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+            <Stethoscope size={14} className="text-brand-600" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Doctor&apos;s Prescription
+            </span>
+            {item.doctors?.full_name && (
+              <span className="ml-auto text-xs text-slate-500">
+                by {item.doctors.full_name}
+              </span>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-slate-500">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Medicine</th>
+                  <th className="px-4 py-2 font-medium">Dose</th>
+                  <th className="px-4 py-2 font-medium">Frequency</th>
+                  <th className="px-4 py-2 font-medium">Duration</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(item.items ?? []).map((it, i) => (
+                  <tr key={i}>
+                    <td className="px-4 py-2 font-medium text-slate-800">{it.medicineName}</td>
+                    <td className="px-4 py-2 text-slate-600">{it.dosage ?? '-'}</td>
+                    <td className="px-4 py-2 text-slate-600">{it.frequency ?? '-'}</td>
+                    <td className="px-4 py-2 text-slate-600">{it.duration ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Add medicine - barcode scan OR manual search */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Add medicine to dispense
+          </p>
+
+          {item && (
+            <form onSubmit={handleBarcodeSubmit} className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="min-w-0 flex-1">
                 <Input
                   ref={barcodeInputRef}
-                  label="Scan Barcode"
+                  label="Barcode"
                   placeholder="Scan or type barcode..."
                   value={barcode}
                   onChange={(e) => setBarcode(e.target.value)}
@@ -427,9 +490,25 @@ function DispenseModal({
                   <Camera size={14} />
                 </Button>
               </div>
-            </div>
-          </form>
-        )}
+            </form>
+          )}
+
+          <div className="my-3 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+              or add manually
+            </span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <MedicinePicker
+            value=""
+            onChange={(name, meta) => {
+              if (meta?.id) addMedicineToRows({ id: meta.id, name });
+            }}
+            placeholder="Search medicine from catalog..."
+          />
+        </div>
 
         <CameraBarcodeScanner
           open={cameraOpen}
@@ -456,8 +535,17 @@ function DispenseModal({
 
         {error && <Alert tone="error">{error}</Alert>}
 
-        {/* Rows */}
-        <div className="space-y-3">
+        {/* Items to dispense */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Items to dispense
+            </p>
+            <p className="text-xs text-slate-500">
+              {rows.filter((r) => r.medicineId).length} / {rows.length} matched
+            </p>
+          </div>
+          <div className="space-y-3">
           {rows.map((r, i) => (
             <div key={i} className="rounded-md border border-slate-200 bg-slate-50 p-3">
               {/* Prescribed (read-only) */}
@@ -505,6 +593,7 @@ function DispenseModal({
               </div>
             </div>
           ))}
+          </div>
         </div>
 
         <Alert tone="info">

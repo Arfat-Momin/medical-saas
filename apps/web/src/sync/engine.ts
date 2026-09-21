@@ -29,9 +29,15 @@ type Handler = (item: QueueItem, payload: any) => Promise<void>;
 const handlers: Record<string, Handler> = {
   async patients(item, payload) {
     if (item.operation === 'create') {
+      // INTEGRITY:
+      //   Do NOT force skipDuplicateCheck here. The payload already
+      //   carries the caller's intent: `true` only when the UI showed
+      //   the user a local duplicate warning and they clicked
+      //   "Register anyway". Otherwise the backend performs its own
+      //   authoritative duplicate check.
       const res = await api.post<{ id: string; uhid: string; updated_at: string }>(
         '/patients',
-        { ...payload, skipDuplicateCheck: true },
+        payload,
         { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
       );
       await patientsRepository.applyCreateSuccess(item.local_id, res);
@@ -187,61 +193,193 @@ const handlers: Record<string, Handler> = {
   },
 };
 
+// ============================================================
+// PULL ENGINE
+// ============================================================
+
+export type PullableEntity =
+  | 'patients'
+  | 'appointments'
+  | 'encounters'
+  | 'medicines'
+  | 'lab_tests'
+  | 'doctors'
+  | 'branches'
+  | 'organization';
+
+interface EntityConfig {
+  kind: 'incremental' | 'full';
+  /** Number of rows already cached for the current tenant. */
+  localCount?: () => Promise<number>;
+  /** Write one server row into Dexie. */
+  upsert: (row: any) => Promise<unknown>;
+}
+
+const ENTITY_CONFIG: Record<PullableEntity, EntityConfig> = {
+  patients: {
+    kind: 'incremental',
+    localCount: () => db.patients.count(),
+    upsert: (row) => patientsRepository.upsertFromServer(row),
+  },
+  appointments: {
+    kind: 'incremental',
+    localCount: () => db.appointments.count(),
+    upsert: (row) => appointmentsRepository.upsertFromServer(row),
+  },
+  encounters: {
+    kind: 'incremental',
+    localCount: async () => {
+      const t = useAuthStore.getState().tenantId;
+      if (!t) return 0;
+      return db.encounterHeaders.where('tenant_id').equals(t).count();
+    },
+    upsert: (row) => encounterHeadersLocalRepository.upsertFromServer(row),
+  },
+  medicines: {
+    kind: 'incremental',
+    localCount: async () => {
+      const t = useAuthStore.getState().tenantId;
+      if (!t) return 0;
+      return db.medicines.where('tenant_id').equals(t).count();
+    },
+    upsert: (row) => medicinesLocalRepository.upsertFromServer(row),
+  },
+  lab_tests: {
+    kind: 'incremental',
+    localCount: async () => {
+      const t = useAuthStore.getState().tenantId;
+      if (!t) return 0;
+      return db.labTests.where('tenant_id').equals(t).count();
+    },
+    upsert: (row) => labTestsLocalRepository.upsertFromServer(row),
+  },
+  doctors: {
+    kind: 'full',
+    upsert: (row) => doctorsRepository.upsertFromServer(row),
+  },
+  branches: {
+    kind: 'full',
+    upsert: (row) => branchesLocalRepository.upsertFromServer(row),
+  },
+  organization: {
+    kind: 'full',
+    upsert: (row) => organizationLocalRepository.upsertFromServer(row),
+  },
+};
+
 interface PullResponse {
   rows: any[];
   serverTime: string;
-  hasMore: boolean;
+  hasMore?: boolean;
 }
 
-async function pullPaginated(
-  entity: string,
-  metaKey: string,
-  applyRow: (row: any) => Promise<void>,
+const INFLIGHT: Partial<Record<PullableEntity, Promise<number>>> = {};
+
+async function pullIncremental(
+  entity: PullableEntity,
+  config: EntityConfig,
+  tenantId: string,
 ): Promise<number> {
-  let total = 0;
+  const cursorKey = `last_pull_at:${tenantId}:${entity}`;
+
+  // Self-heal: zero cached rows for this tenant means any stored cursor
+  // is meaningless - ignore it and take the full set.
+  const count = config.localCount ? await config.localCount() : 0;
+  const since = count === 0 ? null : await meta.get(cursorKey);
+
+  let pulled = 0;
   let offset = 0;
   let hasMore = true;
+  let finalServerTime: string | null = null;
 
+  // IMPORTANT: `since` is captured ONCE before the loop. Re-reading it
+  // on every iteration would use page-1's serverTime on page 2 and
+  // silently skip rows that landed in between.
   while (hasMore) {
-    const since = await meta.get(metaKey);
     const url =
       `/sync/pull?entity=${entity}&limit=${PAGE_SIZE}&offset=${offset}` +
       (since ? `&since=${encodeURIComponent(since)}` : '');
-
     const res = await api.get<PullResponse>(url);
+
     for (const row of res.rows) {
-      await applyRow(row);
-      total++;
+      try {
+        await config.upsert(row);
+        pulled++;
+      } catch (err) {
+        console.warn(`[sync] ${entity} upsert failed for ${row?.id}`, err);
+      }
     }
-    await meta.set(metaKey, res.serverTime);
-    hasMore = res.hasMore;
+
+    finalServerTime = res.serverTime;
+    hasMore = res.hasMore === true;
     offset += PAGE_SIZE;
+
+    // Safety net against a backend misreporting hasMore.
+    if (offset > 100_000) break;
   }
-  return total;
+
+  if (finalServerTime) await meta.set(cursorKey, finalServerTime);
+  return pulled;
 }
 
-async function pullSingle(
-  entity: string,
-  metaKey: string,
-  applyRow: (row: any) => Promise<void>,
+async function pullFull(
+  entity: PullableEntity,
+  config: EntityConfig,
 ): Promise<number> {
-  const since = await meta.get(metaKey);
-  const url =
-    `/sync/pull?entity=${entity}` + (since ? `&since=${encodeURIComponent(since)}` : '');
-  const res = await api.get<PullResponse>(url);
-  for (const row of res.rows) await applyRow(row);
-  await meta.set(metaKey, res.serverTime);
-  return res.rows.length;
+  const res = await api.get<PullResponse>(`/sync/pull?entity=${entity}`);
+  let pulled = 0;
+  for (const row of res.rows) {
+    try {
+      await config.upsert(row);
+      pulled++;
+    } catch (err) {
+      console.warn(`[sync] ${entity} upsert failed for ${row?.id}`, err);
+    }
+  }
+  return pulled;
 }
+
+async function pullOne(entity: PullableEntity): Promise<number> {
+  const existing = INFLIGHT[entity];
+  if (existing) return existing;
+
+  const run = (async () => {
+    const token = useAuthStore.getState().accessToken;
+    const tenantId = useAuthStore.getState().tenantId;
+    if (!token || !tenantId) return 0;
+
+    const config = ENTITY_CONFIG[entity];
+    if (!config) return 0;
+
+    try {
+      if (config.kind === 'incremental') {
+        return await pullIncremental(entity, config, tenantId);
+      }
+      return await pullFull(entity, config);
+    } catch (err) {
+      // A 403 on one entity must never abort the rest of the sync.
+      console.warn(`[sync] pull(${entity}) failed`, err);
+      return 0;
+    }
+  })();
+
+  INFLIGHT[entity] = run;
+  try {
+    return await run;
+  } finally {
+    delete INFLIGHT[entity];
+  }
+}
+
+// ============================================================
+// SYNC ENGINE
+// ============================================================
 
 export const syncEngine = {
   running: false,
   stopRequested: false,
 
   stop(): void {
-    // Called before wiping the local DB (logout / 401). Signals the
-    // run loop to exit between items so we never leave an item in an
-    // 'inflight' state with the queue being cleared underneath it.
     this.stopRequested = true;
   },
 
@@ -284,82 +422,38 @@ export const syncEngine = {
     return result;
   },
 
+  /**
+   * Pull a single entity on demand. Used by hooks that want fresh data
+   * for one table (branches dropdown, medicines list, ...) without
+   * triggering a full multi-entity sync.
+   */
+  pullEntity(entity: PullableEntity): Promise<number> {
+    return pullOne(entity);
+  },
+
+  /**
+   * Pull every entity the current user is allowed to read. Each entity
+   * runs in parallel; a 403 on one entity does not abort the others.
+   */
   async pull(): Promise<number> {
-  const token = useAuthStore.getState().accessToken;
-  const tenantId = useAuthStore.getState().tenantId;
-  if (!token || !tenantId) return 0;
+    const token = useAuthStore.getState().accessToken;
+    const tenantId = useAuthStore.getState().tenantId;
+    if (!token || !tenantId) return 0;
 
-  let pulled = 0;
-
-  // Per-tenant cursor keys. A single global cursor survives tenant
-  // switches, Dexie schema upgrades, and manual table clears, which
-  // makes the server return zero rows on every subsequent pull.
-  const cursorKey = (entity: string) => `last_pull_at:${tenantId}:${entity}`;
-
-  const pullIncremental = async (
-    entity: 'patients' | 'appointments',
-    localCount: () => Promise<number>,
-    upsert: (row: any) => Promise<unknown>,
-  ) => {
-    // Self-heal: an empty local table makes any stored cursor meaningless.
-    const count = await localCount();
-    const since = count === 0 ? null : await meta.get(cursorKey(entity));
-
-    const url =
-      `/sync/pull?entity=${entity}` +
-      (since ? `&since=${encodeURIComponent(since)}` : '');
-
-    const res = await api.get<{ rows: any[]; serverTime: string }>(url);
-
-    for (const row of res.rows) {
-      try {
-        await upsert(row);
-        pulled++;
-      } catch (err) {
-        console.warn(`[sync] ${entity} upsert failed for ${row?.id}`, err);
-      }
-    }
-
-    // Advance the cursor only after we have fully processed the response.
-    await meta.set(cursorKey(entity), res.serverTime);
-  };
-
-  try {
-    await pullIncremental(
+    const entities: PullableEntity[] = [
       'patients',
-      () => db.patients.count(),
-      (row) => patientsRepository.upsertFromServer(row),
-    );
-  } catch (err) {
-    console.warn('[sync] patients pull failed', err);
-  }
-
-  try {
-    await pullIncremental(
       'appointments',
-      () => db.appointments.count(),
-      (row) => appointmentsRepository.upsertFromServer(row),
-    );
-  } catch (err) {
-    console.warn('[sync] appointments pull failed', err);
-  }
+      'doctors',
+      'branches',
+      'organization',
+      'medicines',
+      'lab_tests',
+      'encounters',
+    ];
 
-  // Doctors: small list, always a full pull (no cursor).
-  try {
-    const res = await api.get<{ rows: any[] }>('/sync/pull?entity=doctors');
-    for (const row of res.rows) {
-      try {
-        await doctorsRepository.upsertFromServer(row);
-      } catch (err) {
-        console.warn(`[sync] doctors upsert failed for ${row?.id}`, err);
-      }
-    }
-  } catch (err) {
-    console.warn('[sync] doctors pull failed', err);
-  }
-
-  return pulled;
-},
+    const counts = await Promise.all(entities.map((e) => pullOne(e)));
+    return counts.reduce((a, b) => a + b, 0);
+  },
 
   async sync(): Promise<PushResult> {
     const push = await this.run();
@@ -368,6 +462,16 @@ export const syncEngine = {
   },
 
   async forceFullResync(): Promise<PushResult> {
+    const tenantId = useAuthStore.getState().tenantId;
+    if (tenantId) {
+      const cursorEntities: PullableEntity[] = [
+        'patients', 'appointments', 'encounters', 'medicines', 'lab_tests',
+      ];
+      await Promise.all(
+        cursorEntities.map((k) => meta.set(`last_pull_at:${tenantId}:${k}`, '')),
+      );
+    }
+    // Legacy global cursors from earlier builds.
     await meta.set('last_pull_at', '');
     await meta.set('last_pull_appt_at', '');
     await meta.set('last_pull_doc_at', '');

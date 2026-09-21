@@ -54,7 +54,6 @@ patientsRouter.post(
 
 patientsRouter.patch(
   '/:id',
-  requireRole('HOSPITAL_ADMIN'),
   requirePermission(PERMISSIONS.PATIENT_UPDATE),
   asyncHandler(async (req, res) => {
     const patch = updatePatientSchema.parse(req.body);
@@ -62,3 +61,15 @@ patientsRouter.patch(
     res.json(await patientsService.update(req.auth!, getAccessToken(req), req.params.id!, patch, expected));
   }),
 );
+
+// Hard delete is forbidden for medical data. This soft-deletes the patient
+// (sets deleted_at) and is intentionally restricted to HOSPITAL_ADMIN.
+patientsRouter.delete(
+  '/:id',
+  requireRole('HOSPITAL_ADMIN'),
+  requirePermission(PERMISSIONS.PATIENT_UPDATE),
+  asyncHandler(async (req, res) => {
+    res.json(await patientsService.softDelete(req.auth!, getAccessToken(req), req.params.id!));
+  }),
+);
+

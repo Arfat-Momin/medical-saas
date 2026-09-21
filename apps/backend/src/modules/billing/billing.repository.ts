@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 const INVOICE_SELECT = `
   id, tenant_id, branch_id, invoice_no, patient_id, encounter_id,
@@ -25,7 +25,7 @@ export const billingRepository = {
       .eq('tenant_id', tenantId).eq('is_active', true).order('name');
     if (opts.category) q = q.eq('category', opts.category);
     if (opts.search) {
-      const s = opts.search.replace(/[,%]/g, '');
+      const s = opts.search.replace(/[,%_]/g, '');
       q = q.or(`name.ilike.%${s}%,code.ilike.%${s}%`);
     }
     const { data, error, count } = await q.range(from, to);
@@ -203,7 +203,7 @@ async findDefaultBranch(client: SupabaseClient, tenantId: string) {
     return { encounter: enc, labOrders: labs ?? [], dispenses: dispenses ?? [] };
   },
 
-  /** Combined invoice for a patient Ã¢â‚¬â€ auto-rebuilt from sub-invoices. */
+  /** Combined invoice for a patient ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â auto-rebuilt from sub-invoices. */
   async syncCombinedInvoice(client: SupabaseClient, tenantId: string, userId: string, patientId: string): Promise<string | null> {
     const { data, error } = await client.rpc('sync_combined_invoice', {
       p_tenant_id: tenantId,

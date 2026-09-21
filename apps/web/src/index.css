@@ -233,3 +233,31 @@ table td.font-mono {
     min-width: 640px;
   }
 }
+
+/* ==============================================================
+   Phase 1 responsive utilities — pure additions, no overrides.
+   ============================================================== */
+
+.app-shell-h {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.full-page-h {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.modal-max-h {
+  max-height: 92vh;
+  max-height: 92dvh;
+}
+@media (min-width: 640px) {
+  .modal-max-h {
+    max-height: 88vh;
+  }
+}
+
+.mobile-tabbar {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}

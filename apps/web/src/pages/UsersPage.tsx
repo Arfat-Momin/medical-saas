@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Plus, Search, UserPlus, Info } from 'lucide-react';
+import { Search, UserPlus, Info, Eye, EyeOff } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -18,7 +18,14 @@ import { usePermissions } from '@/hooks/useAuth';
 import { PERMISSIONS } from '@medical/shared';
 import type { InviteUserResponse } from '@/repositories/users.repository';
 
-interface FormValues { email: string; fullName: string; phone: string; roleCode: string; branchId: string }
+interface FormValues {
+  email: string;
+  fullName: string;
+  phone: string;
+  roleCode: string;
+  branchId: string;
+  password: string;
+}
 
 export function UsersPage() {
   const branches = useBranches();
@@ -33,9 +40,10 @@ export function UsersPage() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<InviteUserResponse | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({
-    defaultValues: { email: '', fullName: '', phone: '', roleCode: '', branchId: '' },
+    defaultValues: { email: '', fullName: '', phone: '', roleCode: '', branchId: '', password: '' },
   });
 
   const canManage = can(PERMISSIONS.USER_MANAGE);
@@ -49,21 +57,20 @@ export function UsersPage() {
         phone: values.phone || null,
         roleCode: values.roleCode,
         branchId: values.branchId || null,
+        password: values.password,
       });
       setInvited(res);
       reset();
       setOpen(false);
+      setShowPassword(false);
     } catch (e: any) {
       setError(e?.message ?? 'Failed to invite user');
     }
   }
 
-  async function copyPassword() {
-    if (!invited?.tempPassword) return;
-    await navigator.clipboard.writeText(invited.tempPassword);
-  }
-
-  const totalPages = users.data ? Math.max(1, Math.ceil(users.data.total / (users.data.pageSize || 10))) : 1;
+  const totalPages = users.data
+    ? Math.max(1, Math.ceil(users.data.total / (users.data.pageSize || 10)))
+    : 1;
 
   return (
     <>
@@ -88,7 +95,7 @@ export function UsersPage() {
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
         </div>
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <Select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}>
             <option value="">All roles</option>
             {roles.data?.map((r) => (
@@ -144,10 +151,16 @@ export function UsersPage() {
           </Card>
 
           <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
-            <span>{users.data.total} user{users.data.total === 1 ? '' : 's'} | page {users.data.page} of {totalPages}</span>
+            <span>
+              {users.data.total} user{users.data.total === 1 ? '' : 's'} | page {users.data.page} of {totalPages}
+            </span>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                Previous
+              </Button>
+              <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next
+              </Button>
             </div>
           </div>
         </>
@@ -156,7 +169,7 @@ export function UsersPage() {
       {/* Invite user modal */}
       <Modal
         open={open}
-        onClose={() => { setOpen(false); reset(); setError(null); }}
+        onClose={() => { setOpen(false); reset(); setError(null); setShowPassword(false); }}
         title="Invite user"
         footer={
           <>
@@ -170,6 +183,24 @@ export function UsersPage() {
           <Input label="Full name" placeholder="Dr. Anita Rao" {...register('fullName', { required: true })} />
           <Input label="Email" type="email" placeholder="anita@hospital.com" {...register('email', { required: true })} />
           <Input label="Phone" {...register('phone')} />
+          <Input
+            label="Password"
+            type={showPassword ? 'text' : 'password'}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            rightSlot={
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            }
+            {...register('password', { required: true, minLength: 8 })}
+          />
           <Select label="Role" {...register('roleCode', { required: true })}>
             <option value="">Select a role</option>
             {roles.data?.map((r) => (
@@ -185,7 +216,7 @@ export function UsersPage() {
         </form>
       </Modal>
 
-      {/* Result modal — two flavours */}
+      {/* Result modal - two flavours */}
       <Modal
         open={Boolean(invited)}
         onClose={() => setInvited(null)}
@@ -217,18 +248,15 @@ export function UsersPage() {
                   <strong>{invited.fullName}</strong> ({invited.email}) has been invited as{' '}
                   <strong>{invited.roleCode}</strong>.
                 </Alert>
-                <div>
-                  <p className="mb-1 text-xs font-medium text-slate-600">Temporary password (shown once)</p>
-                  <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm">
-                    <span className="flex-1 select-all">{invited.tempPassword}</span>
-                    <button onClick={copyPassword} className="rounded p-1 hover:bg-slate-200" title="Copy">
-                      <Copy size={14} />
-                    </button>
+                <Alert tone="info">
+                  <div className="flex items-start gap-2">
+                    <Info size={16} className="mt-0.5 shrink-0" />
+                    <div className="text-sm">
+                      Share the password you just set with them securely. They use that password
+                      to sign in. Only an administrator can change it later.
+                    </div>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    Share this securely. The user should change it after first login.
-                  </p>
-                </div>
+                </Alert>
               </>
             )}
           </div>

@@ -69,7 +69,7 @@ export function LabOrdersPage() {
         action={canOrder && <Button onClick={() => setOpen(true)}><Plus size={16} /> New order</Button>} />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <Select label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
             <option value="">All statuses</option>
             <option value="ORDERED">Ordered</option>
@@ -79,7 +79,7 @@ export function LabOrdersPage() {
             <option value="CANCELLED">Cancelled</option>
           </Select>
         </div>
-        <div className="w-48">
+        <div className="w-full sm:w-48">
           <Input label="Date" type="date" value={date} onChange={(e) => { setDate(e.target.value); setPage(1); }} />
         </div>
       </div>
@@ -161,9 +161,18 @@ export function LabOrdersPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Select label="Patient *" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
               <option value="">- select -</option>
-              {patients.data?.rows.map((p) => (
-                <option key={p.id} value={p.id}>{p.uhid} | {p.full_name}</option>
-              ))}
+              {patients.data?.rows.map((p) => {
+                // HF-1: submit the SERVER patient id, not the local Dexie id.
+                // Local-only patients (server_id null) are disabled with a hint
+                // so the FK on lab_orders.patient_id is never violated.
+                const serverId = p.server_id ?? '';
+                const isSyncing = !serverId;
+                return (
+                  <option key={p.id} value={serverId} disabled={isSyncing}>
+                    {p.uhid} | {p.full_name}{isSyncing ? ' (syncing…)' : ''}
+                  </option>
+                );
+              })}
             </Select>
             <Select label="Ordering doctor *" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
               <option value="">- select -</option>

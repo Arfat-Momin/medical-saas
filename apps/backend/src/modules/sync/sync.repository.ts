@@ -32,6 +32,9 @@ export const syncRepository = {
   },
 
   async pullPatients(client: SupabaseClient, tenantId: string, since: string | null, limit = 500, offset = 0) {
+    // No deleted_at filter here on purpose: soft-deleted rows MUST reach the
+    // client so it can purge its local Dexie copy. Regular /patients GET still
+    // filters, so the UI never shows them.
     let q = client.from('patients').select('*').eq('tenant_id', tenantId)
       .order('updated_at', { ascending: true })
       .range(offset, offset + limit - 1);
@@ -66,8 +69,10 @@ export const syncRepository = {
   },
 
   async pullAppointments(client: SupabaseClient, tenantId: string, since: string | null, limit = 500, offset = 0) {
+    // No deleted_at filter here on purpose: soft-deleted rows MUST reach the
+    // client so it can purge its local Dexie copy.
     let q = client.from('appointments')
-      .select('id, tenant_id, branch_id, patient_id, doctor_id, appointment_date, slot_time, queue_token, status, chief_complaint, notes, created_at, updated_at')
+      .select('id, tenant_id, branch_id, patient_id, doctor_id, appointment_date, slot_time, queue_token, status, chief_complaint, notes, created_at, updated_at, deleted_at')
       .eq('tenant_id', tenantId)
       .order('updated_at', { ascending: true })
       .range(offset, offset + limit - 1);

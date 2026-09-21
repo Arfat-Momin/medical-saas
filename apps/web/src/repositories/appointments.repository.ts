@@ -266,6 +266,25 @@ export const appointmentsRepository = {
   },
 
   async upsertFromServer(server: any): Promise<void> {
+    // Batch 6: server says this appointment was soft-deleted. Mark the local
+    // Dexie row as deleted. Same tombstone pattern as patients.
+    if (server.deleted_at) {
+      const existingDeleted = await db.appointments
+        .where('server_id')
+        .equals(server.id)
+        .first();
+      if (existingDeleted) {
+        await db.appointments.update(existingDeleted.local_id, {
+          deleted: 1,
+          sync_status: 'synced',
+          sync_error: null,
+          server_updated_at: server.updated_at,
+          updated_at: server.updated_at,
+        });
+      }
+      return;
+    }
+
     // Find local patient to link
     const patient = await db.patients.where('server_id').equals(server.patient_id).first();
     if (!patient) return; // patient not yet pulled

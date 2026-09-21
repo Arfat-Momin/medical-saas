@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+﻿import type { SupabaseClient } from '@supabase/supabase-js';
 
 const ORDER_SELECT = `
   id, tenant_id, branch_id, patient_id, doctor_id, encounter_id,
@@ -24,7 +24,7 @@ export const laboratoryRepository = {
     let q = client.from('lab_tests').select('*', { count: 'exact' }).eq('tenant_id', tenantId).order('name');
     if (opts.activeOnly) q = q.eq('is_active', true);
     if (opts.search) {
-      const s = opts.search.replace(/[,%]/g, '');
+      const s = opts.search.replace(/[,%_]/g, '');
       q = q.or(`name.ilike.%${s}%,code.ilike.%${s}%,category.ilike.%${s}%`);
     }
     const { data, error, count } = await q.range(from, to);
@@ -115,23 +115,31 @@ export const laboratoryRepository = {
     return data;
   },
 
+  /**
+   * Enter lab results atomically.
+   *
+   * SECURITY / INTEGRITY:
+   *   The previous version updated items one-by-one over separate HTTP
+   *   calls. If the Nth call failed, items 1..N-1 stayed committed with
+   *   results and the rest were blank, leaving the order in a
+   *   half-resulted state. This now calls a single Postgres function
+   *   (`enter_lab_results`) that wraps every UPDATE in one transaction.
+   */
   async enterResults(client: SupabaseClient, tenantId: string, userId: string, items: { itemId: string; resultValue?: string | null; resultUnit?: string | null; flag?: string | null; remarks?: string | null }[]) {
-    for (const it of items) {
-      const patch: Record<string, unknown> = {
-        result_value: it.resultValue ?? null,
-        resulted_by: userId,
-        resulted_at: new Date().toISOString(),
-      };
-      if (it.resultUnit !== undefined) patch.result_unit = it.resultUnit;
-      if (it.flag !== undefined)       patch.flag = it.flag;
-      if (it.remarks !== undefined)    patch.remarks = it.remarks;
+    const payload = items.map((it) => ({
+      itemId:      it.itemId,
+      resultValue: it.resultValue ?? null,
+      resultUnit:  it.resultUnit  ?? null,
+      flag:        it.flag        ?? null,
+      remarks:     it.remarks     ?? null,
+    }));
 
-      const { error } = await client.from('lab_order_items')
-        .update(patch)
-        .eq('tenant_id', tenantId)
-        .eq('id', it.itemId);
-      if (error) throw error;
-    }
+    const { error } = await client.rpc('enter_lab_results', {
+      p_tenant_id: tenantId,
+      p_user_id:   userId,
+      p_items:     payload,
+    });
+    if (error) throw error;
   },
 
   async verifyResults(client: SupabaseClient, tenantId: string, userId: string, orderId: string) {
@@ -150,3 +158,4 @@ export const laboratoryRepository = {
     return data;
   },
 };
+

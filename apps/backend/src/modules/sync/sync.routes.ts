@@ -5,6 +5,7 @@ import { registerDeviceSchema, pullQuerySchema } from './sync.validators.js';
 import { syncService } from './sync.service.js';
 import { PERMISSIONS, type Permission } from '@medical/shared';
 import { Forbidden } from '../../utils/errors.js';
+import { syncPullLimiter, syncDeviceLimiter } from '../../middleware/rateLimit.js';
 
 export const syncRouter = Router();
 
@@ -28,6 +29,7 @@ const ENTITY_PERMISSION: Record<Entity, Permission> = {
 
 syncRouter.post(
   '/devices',
+  syncDeviceLimiter,
   asyncHandler(async (req, res) => {
     const input = registerDeviceSchema.parse(req.body);
     res.json(await syncService.registerDevice(req.auth!, getAccessToken(req), input));
@@ -36,6 +38,7 @@ syncRouter.post(
 
 syncRouter.get(
   '/pull',
+  syncPullLimiter,
   asyncHandler(async (req, res) => {
     const { entity, since, limit, offset } = pullQuerySchema.parse(req.query);
 

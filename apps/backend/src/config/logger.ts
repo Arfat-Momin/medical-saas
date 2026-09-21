@@ -1,13 +1,10 @@
-import pino from 'pino';
+﻿import pino from 'pino';
+import { createRequire } from 'node:module';
 import { env, isProd } from './env.js';
 
-// pino-pretty is a devDependency. Hosts that install with
-// `npm ci --omit=dev` won't have it, and pino would crash the
-// process at boot. Only enable the pretty transport when the
-// module actually resolves on this machine.
 function hasPinoPretty(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const require = createRequire(import.meta.url);
     require.resolve('pino-pretty');
     return true;
   } catch {

@@ -25,6 +25,8 @@ export interface InviteUserInput {
   phone?: string | null;
   roleCode: string;
   branchId?: string | null;
+  /** Admin-set login password for the invited user. */
+  password: string;
 }
 
 export interface InviteUserResponse {
@@ -33,11 +35,6 @@ export interface InviteUserResponse {
   fullName: string;
   roleCode: string;
   branchId: string | null;
-  /**
-   * Only present when a NEW auth account was provisioned.
-   * `null` when an existing platform user was attached to this tenant.
-   */
-  tempPassword: string | null;
   /** True when the email already existed on the platform. */
   existingUser: boolean;
 }

@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { supabaseAdmin, supabaseForUser } from '../../config/supabase.js';
 import { usersRepository } from './users.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
@@ -6,10 +5,6 @@ import { audit } from '../../middleware/audit.js';
 import { assertWithinPlanLimits } from '../../utils/entitlements.js';
 import type { AuthContext } from '@medical/shared';
 import type { InviteUserInput, UpdateUserInput, ListUsersQuery } from './users.validators.js';
-
-function generateTempPassword(): string {
-    return randomBytes(10).toString('base64url').slice(0, 12) + 'aA1!';
-}
 
 /**
  * Supabase Auth admin.createUser returns an error when the email
@@ -52,17 +47,17 @@ export const usersService = {
      *
      * Two paths:
      *   A) Email is brand new to the platform.
-     *      - Create Supabase Auth user with a temp password.
+     *      - Create Supabase Auth user with the admin-provided password.
      *      - Insert a `users` profile row.
      *      - attach_user_to_tenant(role, branch).
-     *      - Return { existingUser: false, tempPassword }.
+     *      - Return { existingUser: false }.
      *
      *   B) Email already has a Supabase Auth account (possibly under
      *      another tenant).
      *      - Do NOT create a new auth user or profile.
-     *      - Do NOT reveal "this email exists" as an error.
+     *      - Do NOT touch the existing user's password.
      *      - attach_user_to_tenant(role, branch) on the existing id.
-     *      - Return { existingUser: true, tempPassword: null }.
+     *      - Return { existingUser: true }.
      *
      * Rollback only deletes the auth user when WE created it.
      */
@@ -97,10 +92,9 @@ export const usersService = {
         }
 
         // ---------- Path A: brand new email ----------
-        const tempPassword = generateTempPassword();
         const { data: authUserData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
             email: input.email,
-            password: tempPassword,
+            password: input.password,
             email_confirm: true,
             user_metadata: { full_name: input.fullName },
         });
@@ -166,8 +160,6 @@ export const usersService = {
                 fullName: input.fullName,
                 roleCode: role.code,
                 branchId: input.branchId ?? null,
-                // Nullable: only present when we provisioned a new account.
-                tempPassword: createdNewAuthUser ? tempPassword : null,
                 existingUser: !createdNewAuthUser,
             };
         } catch (err) {

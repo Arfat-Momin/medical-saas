@@ -157,7 +157,15 @@ export const patientsRepository = {
 
     await db.patients.add(patient);
 
-    // Enqueue for background push
+    // Enqueue for background push.
+    //
+    // INTEGRITY:
+    //   `skipDuplicateCheck: true` is sent ONLY when the caller
+    //   explicitly asked for it (after the UI showed the user a local
+    //   duplicate warning and they clicked "Register anyway"). In every
+    //   other case the backend performs its own authoritative duplicate
+    //   check against the server data, which the local cache cannot
+    //   see.
     await syncQueue.enqueue({
       entity: 'patients',
       operation: 'create',
@@ -172,7 +180,7 @@ export const patientsRepository = {
         allergies: patient.allergies,
         medicalHistory: patient.medical_history,
         emergencyContact: patient.emergency_contact,
-        skipDuplicateCheck: true,
+        ...(input.skipDuplicateCheck === true ? { skipDuplicateCheck: true } : {}),
       },
     });
 
@@ -326,6 +334,36 @@ export const patientsRepository = {
 
   /** Upsert from server (used by the pull phase). */
   async upsertFromServer(server: any): Promise<void> {
+    // Batch 6: server says this patient was soft-deleted. Mark the local
+    // Dexie row as deleted so it disappears from every list. We keep the
+    // row as a tombstone (deleted: 1) so a later pull doesn't resurrect
+    // it, and so the sync engine's queue logic still finds the local id.
+    if (server.deleted_at) {
+      let existingDeleted = await db.patients.where('server_id').equals(server.id).first();
+      if (!existingDeleted && server.mobile) {
+        const candidates = await db.patients
+          .where('mobile')
+          .equals(server.mobile)
+          .filter(
+            (p) =>
+              p.server_id === null &&
+              p.full_name.toLowerCase() === (server.full_name ?? '').toLowerCase(),
+          )
+          .toArray();
+        existingDeleted = candidates[0];
+      }
+      if (existingDeleted) {
+        await db.patients.update(existingDeleted.local_id, {
+          deleted: 1,
+          sync_status: 'synced',
+          sync_error: null,
+          server_updated_at: server.updated_at,
+          updated_at: server.updated_at,
+        });
+      }
+      return;
+    }
+
     // 1. Try by server_id (normal path)
     let existing = await db.patients.where('server_id').equals(server.id).first();
 

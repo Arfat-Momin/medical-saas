@@ -21,7 +21,7 @@ export function AppShell() {
 
   if (isError) {
     return (
-      <div className="flex h-screen items-center justify-center p-6 text-center text-sm text-red-600">
+      <div className="full-page-h flex items-center justify-center p-6 text-center text-sm text-red-600">
         Failed to load your session. Try signing out and in again.
       </div>
     );
@@ -29,7 +29,6 @@ export function AppShell() {
 
   return (
     <>
-      {/* Ambient background - hidden on mobile (perf), off flex flow on desktop */}
       <div
         className="hidden md:block"
         aria-hidden="true"
@@ -72,9 +71,8 @@ export function AppShell() {
         />
       </div>
 
-      {/* Shell - safe-area top so nothing hides under the notch */}
       <div
-        className="relative z-10 flex h-screen overflow-hidden"
+        className="app-shell-h relative z-10 flex overflow-hidden"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       >
         <Sidebar />

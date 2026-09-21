@@ -76,7 +76,7 @@ export function PricingPage() {
       </div>
 
       {tab === 'doctors' && (
-        <Card className="overflow-hidden">
+        <Card className="overflow-x-auto overflow-y-hidden">
           <CardHeader title="Doctor consultation fees" subtitle={`${doctors.data?.total ?? 0} doctor(s). Added to the invoice when a consultation is completed.`} />
           {doctors.isLoading && <div className="flex justify-center py-10"><Spinner size={24} /></div>}
           {doctors.isError && <CardBody><Alert tone="error">Failed to load doctors.</Alert></CardBody>}
@@ -130,7 +130,7 @@ export function PricingPage() {
       )}
 
       {tab === 'labs' && (
-        <Card className="overflow-hidden">
+        <Card className="overflow-x-auto overflow-y-hidden">
           <CardHeader title="Lab test prices" subtitle={`${labs.data?.total ?? 0} test(s). Added to the invoice when a test is ordered.`} />
           {labs.isLoading && <div className="flex justify-center py-10"><Spinner size={24} /></div>}
           {labs.isError && <CardBody><Alert tone="error">Failed to load lab tests.</Alert></CardBody>}

@@ -65,7 +65,7 @@ export function StockPage() {
         </Card>
       </div>
 
-      <Card className="mt-6 overflow-hidden">
+      <Card className="mt-6 overflow-x-auto overflow-y-hidden">
         <CardHeader title="In-stock batches" subtitle={`${batches.data?.length ?? 0} batch(es) with quantity > 0`} />
         {batches.isLoading ? (
           <div className="flex justify-center py-8"><Spinner size={22} /></div>

@@ -28,7 +28,6 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      {/* Overlay — dark, no backdrop blur so content behind stays sharp */}
       <div
         className="absolute inset-0 bg-slate-900/50 animate-fade-in"
         onClick={onClose}
@@ -39,7 +38,7 @@ export function Modal({
         className={cn(
           'relative flex w-full flex-col overflow-hidden bg-white shadow-pop',
           'rounded-t-2xl sm:rounded-xl',
-          'max-h-[92vh] sm:max-h-[88vh]',
+          'modal-max-h',
           widths[size],
         )}
       >
@@ -53,7 +52,7 @@ export function Modal({
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            className="shrink-0 rounded-md p-2.5 sm:p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
             aria-label="Close"
           >
             <X size={18} />
