@@ -94,6 +94,12 @@ export function IPDBillBuilderPage() {
     if (!bill.data?.id) return;
     const valid = items.filter((it) => it.description.trim() && Number(it.qty) > 0);
     if (valid.length === 0) { setError('Add at least one item'); return; }
+
+    const hasInvalidLines = items.some((it) => (it.description.trim() || Number(it.unitPrice) > 0) && Number(it.qty) <= 0);
+    if (hasInvalidLines) {
+      setError('Some rows are missing a valid quantity (> 0). Please fix or remove them.');
+      return;
+    }
     try {
       await replaceItems.mutateAsync({
         discount: Number(discount || 0),

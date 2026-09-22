@@ -45,8 +45,15 @@ export function PatientsPage() {
   const roles = useAuthStore((s) => s.roles);
   const isHospitalAdmin = roles.includes('HOSPITAL_ADMIN');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const [page, setPage] = useState(1);
-  const patients = usePatients({ page, pageSize: 10, search });
+  const patients = usePatients({ page, pageSize: 10, search: debouncedSearch });
   const create = useCreatePatient();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);

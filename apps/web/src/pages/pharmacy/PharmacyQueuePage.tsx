@@ -356,7 +356,7 @@ function DispenseModal({
       (item.items ?? []).map((it) => ({
         medicineName: it.medicineName,
         medicineId: '',
-        qty: 10,
+        qty: (it as any).quantity ?? 1,
         prescribedDose: it.dosage ?? null,
         prescribedFrequency: it.frequency ?? null,
         prescribedDuration: it.duration ?? null,

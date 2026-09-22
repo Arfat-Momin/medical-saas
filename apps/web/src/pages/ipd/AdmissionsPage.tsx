@@ -54,6 +54,15 @@ export function AdmissionsPage() {
   async function onAdmit() {
     setError(null);
     if (!patientId || !doctorId || !bedId) { setError('Patient, doctor and bed are required'); return; }
+
+    const alreadyAdmitted = list.data?.rows.some(
+      (a) => a.patients?.id === patientId && a.status === 'ADMITTED'
+    );
+    if (alreadyAdmitted) {
+      setError('This patient is already admitted. Discharge them first before creating a new admission.');
+      return;
+    }
+
     try {
       await admit.mutateAsync({
         patientId, bedId, admittingDoctor: doctorId,

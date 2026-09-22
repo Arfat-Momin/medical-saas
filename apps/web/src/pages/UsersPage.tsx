@@ -64,7 +64,17 @@ export function UsersPage() {
       setOpen(false);
       setShowPassword(false);
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to invite user');
+      const rawMsg: string = e?.message ?? '';
+      const isDuplicate =
+        rawMsg.toLowerCase().includes('duplicate') ||
+        rawMsg.toLowerCase().includes('already exists') ||
+        rawMsg.toLowerCase().includes('unique') ||
+        rawMsg.toLowerCase().includes('email');
+      setError(
+        isDuplicate
+          ? 'A user with this email already exists. Check the users list or use a different email.'
+          : rawMsg || 'Failed to invite user'
+      );
     }
   }
 

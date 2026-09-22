@@ -67,6 +67,12 @@ export function MedicinesPage() {
       gstRate: values.gstRate ? Number(values.gstRate) : 0,
       reorderLevel: Number(values.reorderLevel ?? 10),
     };
+
+    if (!editing && list.data?.rows.some((m: any) => m.name.toLowerCase() === values.name.toLowerCase())) {
+      setError(`A medicine with the name "${values.name}" already exists.`);
+      return;
+    }
+
     try {
       if (editing) await update.mutateAsync({ id: editing.id, patch: payload });
       else await create.mutateAsync(payload as any);
@@ -174,8 +180,8 @@ export function MedicinesPage() {
               {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
             </Select>
             <Input label="HSN code" {...register('hsnCode')} />
-            <Input label="GST rate (%)" {...register('gstRate')} />
-            <Input label="Reorder level" type="number" {...register('reorderLevel')} />
+            <Input label="GST rate (%)" type="number" min="0" max="100" step="0.01" hint="Enter 0–100 (%)" {...register('gstRate', { min: 0, max: 100 })} />
+            <Input label="Reorder level" type="number" min="0" {...register('reorderLevel', { min: 0 })} />
           </div>
         </form>
       </Modal>

@@ -215,6 +215,17 @@ function PermissionEditor({
 
   async function onSave() {
     if (!role) return;
+
+    const removed = role.permissions.filter((p) => !selected.includes(p));
+    if (removed.length > 0) {
+      const ok = window.confirm(
+        `This will REMOVE ${removed.length} permission(s) from "${role.name}":\n\n` +
+        removed.join('\n') +
+        '\n\nAre you sure?'
+      );
+      if (!ok) return;
+    }
+
     setError(null);
     try {
       await update.mutateAsync({ id: role.id, permissions: selected });

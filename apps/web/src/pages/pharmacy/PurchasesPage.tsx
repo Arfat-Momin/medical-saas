@@ -45,7 +45,7 @@ export function PurchasesPage() {
         supplierId, invoiceNo: invoiceNo || null, purchaseDate, notes: notes || null,
         items: validItems.map((i) => ({
           medicineId: i.medicineId, batchNo: i.batchNo, expiryDate: i.expiryDate,
-          qty: Number(i.qty), purchasePrice: Number(i.purchasePrice || 0),
+          qty: Number(i.qty), purchasePrice: Math.max(0, Number(i.purchasePrice || 0)),
           mrp: i.mrp ? Number(i.mrp) : null,
           sellingPrice: i.sellingPrice ? Number(i.sellingPrice) : null,
         })),

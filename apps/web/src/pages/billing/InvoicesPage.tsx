@@ -76,6 +76,12 @@ export function InvoicesPage() {
     const validLines = lines.filter((l) => l.description.trim() && Number(l.qty) > 0);
     if (validLines.length === 0) { setError('Add at least one item with description and quantity'); return; }
 
+    const hasInvalidLines = lines.some((l) => (l.description.trim() || Number(l.unitPrice) > 0) && Number(l.qty) <= 0);
+    if (hasInvalidLines) {
+      setError('Some rows are missing a valid quantity (> 0). Please fix or remove them.');
+      return;
+    }
+
     try {
       await create.mutateAsync({
         patientId,

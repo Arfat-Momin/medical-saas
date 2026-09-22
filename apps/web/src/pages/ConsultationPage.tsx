@@ -81,6 +81,17 @@ export function ConsultationPage() {
   const [printOpen, setPrintOpen] = useState(false);
   const [loadedEncounterId, setLoadedEncounterId] = useState<string | null>(null);
   const [doctorName, setDoctorName] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   useEffect(() => {
     if (!enc.data) return;
@@ -142,6 +153,10 @@ export function ConsultationPage() {
         .map((d, i) => ({ ...d, isPrimary: i === 0 || d.isPrimary }));
 
       const cleanItems = items.filter((it) => it.medicineName.trim());
+      if (items.length > 0 && cleanItems.length === 0 && items.some((it) => it.dosage || it.frequency || it.duration)) {
+        setError('Some prescription rows have details but no medicine name. Please fill in the medicine name or remove the row.');
+        return;
+      }
 
       await save.mutateAsync({
         chiefComplaint: chiefComplaint || null,
@@ -156,6 +171,7 @@ export function ConsultationPage() {
         complete,
       });
       setSaved(true);
+      setDirty(false);
       if (complete) {
         setTimeout(() => navigate('/appointments'), 800);
       }
@@ -165,9 +181,11 @@ export function ConsultationPage() {
   }
 
   function updateDiagnosis(i: number, patch: Partial<DiagnosisData>) {
+    setDirty(true);
     setDiagnoses(diagnoses.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   }
   function updateItem(i: number, patch: Partial<PrescriptionItemData>) {
+    setDirty(true);
     setItems(items.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   }
 
@@ -197,7 +215,10 @@ export function ConsultationPage() {
     <>
       <div className="mb-4">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => {
+            if (dirty && !window.confirm('You have unsaved changes. Leave anyway?')) return;
+            navigate(-1);
+          }}
           className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline"
         >
           <ArrowLeft size={14} /> Back
@@ -236,7 +257,7 @@ export function ConsultationPage() {
         </div>
       )}
 
-      <fieldset disabled={isCompleted} className="space-y-6">
+      <fieldset disabled={isCompleted} className="space-y-6" onChange={() => setDirty(true)}>
         {/* SYMPTOMS */}
         <Card>
           <CardHeader title="Symptoms & Complaint" subtitle="Chief complaint, history and examination" />
@@ -273,14 +294,14 @@ export function ConsultationPage() {
           />
           <CardBody>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <Input label="Temp (C)" value={vitals.temperatureC ?? ''} onChange={(ev) => setVitals({ ...vitals, temperatureC: ev.target.value })} />
-              <Input label="Pulse" value={vitals.pulse ?? ''} onChange={(ev) => setVitals({ ...vitals, pulse: ev.target.value })} />
-              <Input label="BP sys" value={vitals.bpSystolic ?? ''} onChange={(ev) => setVitals({ ...vitals, bpSystolic: ev.target.value })} />
-              <Input label="BP dia" value={vitals.bpDiastolic ?? ''} onChange={(ev) => setVitals({ ...vitals, bpDiastolic: ev.target.value })} />
-              <Input label="Resp" value={vitals.respRate ?? ''} onChange={(ev) => setVitals({ ...vitals, respRate: ev.target.value })} />
-              <Input label="SpO2" value={vitals.spo2 ?? ''} onChange={(ev) => setVitals({ ...vitals, spo2: ev.target.value })} />
-              <Input label="Weight" value={vitals.weightKg ?? ''} onChange={(ev) => setVitals({ ...vitals, weightKg: ev.target.value })} />
-              <Input label="Height" value={vitals.heightCm ?? ''} onChange={(ev) => setVitals({ ...vitals, heightCm: ev.target.value })} />
+              <Input label="Temp (C)" type="number" min="30" max="45" step="0.1" value={vitals.temperatureC ?? ''} onChange={(ev) => setVitals({ ...vitals, temperatureC: ev.target.value })} />
+              <Input label="Pulse" type="number" min="20" max="300" value={vitals.pulse ?? ''} onChange={(ev) => setVitals({ ...vitals, pulse: ev.target.value })} />
+              <Input label="BP sys" type="number" min="50" max="300" value={vitals.bpSystolic ?? ''} onChange={(ev) => setVitals({ ...vitals, bpSystolic: ev.target.value })} />
+              <Input label="BP dia" type="number" min="30" max="200" value={vitals.bpDiastolic ?? ''} onChange={(ev) => setVitals({ ...vitals, bpDiastolic: ev.target.value })} />
+              <Input label="Resp" type="number" min="5" max="60" value={vitals.respRate ?? ''} onChange={(ev) => setVitals({ ...vitals, respRate: ev.target.value })} />
+              <Input label="SpO2" type="number" min="50" max="100" value={vitals.spo2 ?? ''} onChange={(ev) => setVitals({ ...vitals, spo2: ev.target.value })} />
+              <Input label="Weight" type="number" min="0.5" max="500" step="0.1" value={vitals.weightKg ?? ''} onChange={(ev) => setVitals({ ...vitals, weightKg: ev.target.value })} />
+              <Input label="Height" type="number" min="20" max="250" step="0.1" value={vitals.heightCm ?? ''} onChange={(ev) => setVitals({ ...vitals, heightCm: ev.target.value })} />
             </div>
             <p className="mt-3 text-xs text-slate-500">
               BMI: <span className="font-mono text-slate-700">{bmi ?? '-'}</span>
@@ -297,7 +318,7 @@ export function ConsultationPage() {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => setDiagnoses([...diagnoses, emptyDiagnosis()])}
+                onClick={() => { setDirty(true); setDiagnoses([...diagnoses, emptyDiagnosis()]); }}
               >
                 <Plus size={14} /> Add
               </Button>
@@ -342,7 +363,7 @@ export function ConsultationPage() {
                   </label>
                   {diagnoses.length > 1 && (
                     <button
-                      onClick={() => setDiagnoses(diagnoses.filter((_, j) => j !== i))}
+                      onClick={() => { setDirty(true); setDiagnoses(diagnoses.filter((_, j) => j !== i)); }}
                       className="text-slate-400 hover:text-red-500"
                     >
                       <Trash2 size={14} />
@@ -365,7 +386,7 @@ export function ConsultationPage() {
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => setItems([...items, emptyItem()])}
+                  onClick={() => { setDirty(true); setItems([...items, emptyItem()]); }}
                 >
                   <Plus size={14} /> Add
                 </Button>
@@ -442,7 +463,7 @@ export function ConsultationPage() {
                   <div className="md:col-span-2 flex items-end">
                     {items.length > 1 && (
                       <button
-                        onClick={() => setItems(items.filter((_, j) => j !== i))}
+                        onClick={() => { setDirty(true); setItems(items.filter((_, j) => j !== i)); }}
                         className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
                         title="Remove medicine"
                       >
@@ -470,7 +491,7 @@ export function ConsultationPage() {
             action={<FlaskConical size={16} className="text-slate-400" />}
           />
           <CardBody>
-            <LabTestPicker value={labTests} onChange={setLabTests} disabled={isCompleted} />
+            <LabTestPicker value={labTests} onChange={(val) => { setDirty(true); setLabTests(val); }} disabled={isCompleted} />
           </CardBody>
         </Card>
 
