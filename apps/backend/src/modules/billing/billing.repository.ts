@@ -1,11 +1,11 @@
-﻿import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const INVOICE_SELECT = `
   id, tenant_id, branch_id, invoice_no, patient_id, encounter_id,
   status, subtotal, discount_amount, tax_amount,
   total_amount, paid_amount, balance_amount,
   notes, created_at, updated_at, finalized_at,
-  invoice_type, source_reference_id,
+  invoice_type, source_reference_id, ipd_admission_id,
   patients:patient_id ( id, uhid, full_name, mobile ),
   branches:branch_id ( id, name, branch_code )
 `;
@@ -15,7 +15,7 @@ const ITEM_SELECT = `
   qty, unit_price, discount, tax_rate, amount, created_at
 `;
 
-export type InvoiceType = 'COMBINED' | 'DOCTOR' | 'PHARMACY' | 'LAB';
+export type InvoiceType = 'COMBINED' | 'DOCTOR' | 'PHARMACY' | 'LAB' | 'IPD';
 
 export const billingRepository = {
   async listBillableItems(client: SupabaseClient, tenantId: string, opts: { search?: string; category?: string; page: number; pageSize: number }) {
@@ -96,7 +96,7 @@ export const billingRepository = {
     return { ...inv, items: items ?? [], payments: payments ?? [], refunds: refunds ?? [] };
   },
 
-  async createInvoice(client: SupabaseClient, p: { tenantId: string; userId: string; branchId: string; patientId: string; encounterId?: string | null; notes?: string | null; discount: number; items: any[] }) {
+  async createInvoice(client: SupabaseClient, p: { tenantId: string; userId: string; branchId: string; patientId: string; encounterId?: string | null; ipdAdmissionId?: string | null; invoiceType?: InvoiceType; notes?: string | null; discount: number; items: any[] }) {
     const { data, error } = await client.rpc('create_invoice', {
       p_tenant_id: p.tenantId,
       p_branch_id: p.branchId,
@@ -105,11 +105,61 @@ export const billingRepository = {
       p_notes: p.notes ?? null,
       p_discount: p.discount,
       p_items: p.items,
+      p_invoice_type: p.invoiceType ?? 'COMBINED',
+      p_ipd_admission_id: p.ipdAdmissionId ?? null,
       p_user_id: p.userId,
     });
     if (error) throw error;
     const r = Array.isArray(data) ? data[0] : data;
     return r as { invoiceId: string; invoiceNo: string; totalAmount: number };
+  },
+
+  async findAdmissionBasic(client: SupabaseClient, tenantId: string, admissionId: string) {
+    const { data, error } = await client.from('admissions')
+      .select('id, patient_id, branch_id')
+      .eq('tenant_id', tenantId).eq('id', admissionId).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async createIpdDraft(client: SupabaseClient, p: { tenantId: string; userId: string; branchId: string; patientId: string; admissionId: string }) {
+    const { data, error } = await client.rpc('create_ipd_draft_invoice', {
+      p_tenant_id: p.tenantId,
+      p_branch_id: p.branchId,
+      p_patient_id: p.patientId,
+      p_admission_id: p.admissionId,
+      p_user_id: p.userId,
+    });
+    if (error) throw error;
+    const r = Array.isArray(data) ? data[0] : data;
+    return r as { invoiceId: string; invoiceNo: string; created: boolean };
+  },
+
+  async replaceIpdItems(client: SupabaseClient, p: { tenantId: string; invoiceId: string; items: any[]; discount: number }) {
+    const { data, error } = await client.rpc('replace_invoice_items', {
+      p_invoice_id: p.invoiceId,
+      p_tenant_id: p.tenantId,
+      p_items: p.items,
+      p_discount: p.discount,
+    });
+    if (error) throw error;
+    const r = Array.isArray(data) ? data[0] : data;
+    return r as { invoiceId: string; totalAmount: number };
+  },
+
+  async getIpdBillByAdmission(client: SupabaseClient, tenantId: string, admissionId: string) {
+    const { data, error } = await client
+      .from('invoices')
+      .select(INVOICE_SELECT)
+      .eq('tenant_id', tenantId)
+      .eq('ipd_admission_id', admissionId)
+      .eq('invoice_type', 'IPD')
+      .neq('status', 'CANCELLED')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   },
 
   async recordPayment(client: SupabaseClient, p: { tenantId: string; userId: string; invoiceId: string; amount: number; method: string; reference?: string | null; notes?: string | null }) {

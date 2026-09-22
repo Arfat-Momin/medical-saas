@@ -36,8 +36,9 @@ const newLine: LineItem = {
 export function InvoicesPage() {
   const { can } = usePermissions();
   const [status, setStatus] = useState('');
+  const [invoiceType, setInvoiceType] = useState('');
   const [page, setPage] = useState(1);
-  const list = useInvoices({ status: status || undefined, page, pageSize: 20 });
+  const list = useInvoices({ status: status || undefined, invoiceType: invoiceType || undefined, page, pageSize: 20 });
 
   const patients = usePatients({ page: 1, pageSize: 200 });
   const create = useCreateInvoice();
@@ -108,6 +109,17 @@ export function InvoicesPage() {
           <option value="PAID">Paid</option>
           <option value="REFUNDED">Refunded</option>
           <option value="CANCELLED">Cancelled</option>
+        </Select>
+      </div>
+
+      <div className="mb-4 w-full sm:w-48">
+        <Select label="Type" value={invoiceType} onChange={(e) => { setInvoiceType(e.target.value); setPage(1); }}>
+          <option value="">All types</option>
+          <option value="COMBINED">Combined</option>
+          <option value="DOCTOR">Doctor</option>
+          <option value="PHARMACY">Pharmacy</option>
+          <option value="LAB">Lab</option>
+          <option value="IPD">IPD</option>
         </Select>
       </div>
 

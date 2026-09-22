@@ -1,6 +1,6 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, BedDouble, Check, ClipboardList, FileText, Pill, Stethoscope, UserCog } from 'lucide-react';
+import { ArrowLeft, BedDouble, Check, ClipboardList, FileText, Pill, Receipt, Stethoscope, UserCog } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -15,6 +15,7 @@ import {
   useAddNursingNote, useAddDoctorRound, useAddMar, useMarkMar, useBeds,
 } from '@/hooks/useIpd';
 import { usePermissions } from '@/hooks/useAuth';
+import { useIpdBillByAdmission } from '@/hooks/useBilling';
 import { PERMISSIONS } from '@medical/shared';
 
 const statusTone: Record<string, BadgeTone> = {
@@ -24,7 +25,7 @@ const marTone: Record<string, BadgeTone> = {
   SCHEDULED: 'blue', ADMINISTERED: 'green', HELD: 'yellow', REFUSED: 'red', MISSED: 'red',
 };
 
-type Tab = 'overview' | 'notes' | 'rounds' | 'mar' | 'transfers';
+type Tab = 'overview' | 'notes' | 'rounds' | 'mar' | 'transfers' | 'billing';
 
 export function AdmissionDetailPage() {
   const { admissionId } = useParams<{ admissionId: string }>();
@@ -38,6 +39,7 @@ export function AdmissionDetailPage() {
   const addRound = useAddDoctorRound(admissionId ?? '');
   const addMar = useAddMar(admissionId ?? '');
   const markMar = useMarkMar(admissionId ?? '');
+  const ipdBill = useIpdBillByAdmission(admissionId);
 
   const [tab, setTab] = useState<Tab>('overview');
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +166,7 @@ export function AdmissionDetailPage() {
             ['rounds', 'Doctor rounds', Stethoscope],
             ['mar', 'MAR', Pill],
             ['transfers', 'Transfers', UserCog],
+            ['billing', 'Billing', Receipt],
           ] as [Tab, string, any][]).map(([key, label, Icon]) => (
             <button
               key={key}
@@ -384,6 +387,46 @@ export function AdmissionDetailPage() {
                 </li>
               ))}
             </ul>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Tab: Billing */}
+      {tab === 'billing' && (
+        <Card>
+          <CardHeader title="IPD Bill" subtitle="Inpatient billing summary" />
+          <CardBody className="space-y-4">
+            {ipdBill.isLoading && <Spinner size={20} />}
+            {ipdBill.isError && <Alert tone="error">Failed to load IPD bill.</Alert>}
+            {!ipdBill.isLoading && !ipdBill.isError && !ipdBill.data && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">No IPD bill has been created for this admission yet.</p>
+                <Link to={`/ipd/admissions/${admissionId}/bill`}>
+                  <Button disabled={!canManage}>Create IPD bill</Button>
+                </Link>
+              </div>
+            )}
+            {ipdBill.data && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge tone={ipdBill.data.finalized_at ? 'green' : 'blue'}>
+                    {ipdBill.data.finalized_at ? 'FINALIZED' : ipdBill.data.status}
+                  </Badge>
+                  <span className="font-mono text-sm text-slate-600">{ipdBill.data.invoice_no}</span>
+                </div>
+                <div className="text-sm text-slate-600">
+                  Total: <span className="font-mono font-medium">Rs.{ipdBill.data.total_amount.toFixed(2)}</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link to={`/ipd/admissions/${admissionId}/bill`}>
+                    <Button variant="secondary">Open IPD Bill Builder</Button>
+                  </Link>
+                  <Link to={`/billing/invoices/${ipdBill.data.id}`}>
+                    <Button variant="ghost">View Invoice</Button>
+                  </Link>
+                </div>
+              </div>
+            )}
           </CardBody>
         </Card>
       )}

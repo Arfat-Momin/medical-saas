@@ -21,7 +21,7 @@ export function useUpdateBillableItem() {
 }
 
 // ---- Invoices ----
-export function useInvoices(params: { patientId?: string; status?: string; from?: string; to?: string; page?: number; pageSize?: number }) {
+export function useInvoices(params: { patientId?: string; invoiceType?: string; status?: string; from?: string; to?: string; page?: number; pageSize?: number }) {
   return useQuery({ queryKey: [...INVOICES, params], queryFn: () => repo.listInvoices(params) });
 }
 export function useInvoice(id: string | undefined) {
@@ -74,6 +74,45 @@ export function useRefundPayment(invoiceId: string) {
       qc.invalidateQueries({ queryKey: INVOICES });
       qc.invalidateQueries({ queryKey: [...INVOICES, invoiceId] });
       qc.invalidateQueries({ queryKey: ['billing', 'sub-invoices', invoiceId] });
+    },
+  });
+}
+
+// ---- IPD custom bill hooks ----
+export function useIpdBillByAdmission(admissionId: string | undefined) {
+  return useQuery({
+    queryKey: ['billing', 'ipd-bill', admissionId],
+    queryFn: async () => {
+      const bill = await repo.getIpdBillByAdmission(admissionId!);
+      if (!bill) return null;
+      const full = await repo.getInvoice(bill.id);
+      return full;
+    },
+    enabled: Boolean(admissionId),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: 30_000,
+  });
+}
+export function useCreateIpdDraft() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { admissionId: string }) => repo.createIpdDraft(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['billing', 'ipd-bill'] });
+      qc.invalidateQueries({ queryKey: INVOICES });
+    },
+  });
+}
+export function useReplaceIpdItems(invoiceId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { discount: number; items: any[] }) => repo.replaceIpdItems(invoiceId, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['billing', 'ipd-bill'] });
+      qc.invalidateQueries({ queryKey: [...INVOICES, invoiceId] });
+      qc.invalidateQueries({ queryKey: INVOICES });
     },
   });
 }

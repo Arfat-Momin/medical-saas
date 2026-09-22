@@ -27,6 +27,7 @@ import { LocationsPage } from '@/pages/ipd/LocationsPage';
 import { BedsPage } from '@/pages/ipd/BedsPage';
 import { AdmissionsPage } from '@/pages/ipd/AdmissionsPage';
 import { AdmissionDetailPage } from '@/pages/ipd/AdmissionDetailPage';
+import { IPDBillBuilderPage } from '@/pages/ipd/IPDBillBuilderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { PatientsPage } from '@/pages/PatientsPage';
 import { PatientDetailPage } from '@/pages/PatientDetailPage';
@@ -88,6 +89,7 @@ export default function App() {
             <Route path="/ipd/beds" element={<BedsPage />} />
             <Route path="/ipd/admissions" element={<AdmissionsPage />} />
             <Route path="/ipd/admissions/:admissionId" element={<AdmissionDetailPage />} />
+            <Route path="/ipd/admissions/:admissionId/bill" element={<IPDBillBuilderPage />} />
             <Route path="/settings/sessions" element={<SessionsPage />} />
             <Route path="/settings/pricing" element={<AdminPricingPage />} />
             <Route path="/settings/subscription" element={<SubscriptionPage />} />

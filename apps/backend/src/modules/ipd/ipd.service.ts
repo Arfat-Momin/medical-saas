@@ -1,7 +1,8 @@
-import { supabaseForUser } from '../../config/supabase.js';
+import { supabaseForUser, supabaseAdmin } from '../../config/supabase.js';
 import { ipdRepository as repo } from './ipd.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
 import { audit } from '../../middleware/audit.js';
+import { logger } from '../../config/logger.js';
 import type { AuthContext } from '@medical/shared';
 import type {
   CreateLocationInput, UpdateLocationInput, ListLocationsQuery,
@@ -132,6 +133,18 @@ export const ipdService = {
       dischargeType: input.dischargeType,
       dischargeSummary: input.dischargeSummary ?? null,
     });
+
+    try {
+      await supabaseAdmin
+        .from('invoices')
+        .update({ finalized_at: new Date().toISOString() })
+        .eq('tenant_id', auth.tenantId)
+        .eq('ipd_admission_id', admissionId)
+        .eq('invoice_type', 'IPD')
+        .is('finalized_at', null);
+    } catch (e: any) {
+      logger.warn({ admissionId, err: e }, 'Failed to finalize IPD invoice after discharge');
+    }
 
     await audit({ actorUserId: auth.userId, action: 'PATIENT_DISCHARGED', entity: 'admissions', entityId: admissionId, after: { type: input.dischargeType } });
     return { success: true };

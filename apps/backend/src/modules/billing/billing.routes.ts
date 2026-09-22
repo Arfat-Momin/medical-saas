@@ -8,6 +8,7 @@ import {
   createBillableItemSchema, updateBillableItemSchema, listBillableItemsQuerySchema,
   createInvoiceSchema, listInvoicesQuerySchema,
   recordPaymentSchema, refundPaymentSchema, invoiceFromEncounterSchema,
+  replaceInvoiceItemsSchema, createIpdDraftSchema,
 } from './billing.validators.js';
 import { billingService } from './billing.service.js';
 
@@ -62,6 +63,30 @@ billingRouter.post('/invoices/from-encounter',
   asyncHandler(async (req, res) => {
     const input = invoiceFromEncounterSchema.parse(req.body);
     res.status(201).json(await billingService.invoiceFromEncounter(req.auth!, getAccessToken(req), input));
+  }),
+);
+
+// ---- IPD custom bill ----
+billingRouter.post('/invoices/ipd-draft',
+  requirePermission(PERMISSIONS.BILLING_MANAGE),
+  asyncHandler(async (req, res) => {
+    const input = createIpdDraftSchema.parse(req.body);
+    res.status(201).json(await billingService.createIpdDraft(req.auth!, getAccessToken(req), input));
+  }),
+);
+
+billingRouter.put('/invoices/:id/items',
+  requirePermission(PERMISSIONS.BILLING_MANAGE),
+  asyncHandler(async (req, res) => {
+    const input = replaceInvoiceItemsSchema.parse(req.body);
+    res.json(await billingService.replaceIpdItems(req.auth!, getAccessToken(req), req.params.id!, input));
+  }),
+);
+
+billingRouter.get('/admissions/:admissionId/ipd-bill',
+  requirePermission(PERMISSIONS.BILLING_READ),
+  asyncHandler(async (req, res) => {
+    res.json(await billingService.getIpdBillByAdmission(req.auth!, getAccessToken(req), req.params.admissionId!));
   }),
 );
 

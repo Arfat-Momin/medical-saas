@@ -8,6 +8,7 @@ import type {
   CreateBillableItemInput, UpdateBillableItemInput, ListBillableItemsQuery,
   CreateInvoiceInput, ListInvoicesQuery,
   RecordPaymentInput, RefundPaymentInput, InvoiceFromEncounterInput,
+  ReplaceInvoiceItemsInput, CreateIpdDraftInput,
 } from './billing.validators.js';
 
 export const billingService = {
@@ -72,6 +73,8 @@ export const billingService = {
       branchId,
       patientId: input.patientId,
       encounterId: input.encounterId ?? null,
+      ipdAdmissionId: input.ipdAdmissionId ?? null,
+      invoiceType: input.invoiceType ?? 'COMBINED',
       notes: input.notes ?? null,
       discount: input.discount,
       items: input.items,
@@ -294,6 +297,58 @@ export const billingService = {
       discount: 0,
       items,
     });
+  },
+
+  // ---- IPD custom bill ----
+  async createIpdDraft(auth: AuthContext, token: string, input: CreateIpdDraftInput) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const adm = await repo.findAdmissionBasic(client, auth.tenantId, input.admissionId);
+    if (!adm) throw NotFound('Admission not found');
+    const result = await repo.createIpdDraft(client, {
+      tenantId: auth.tenantId,
+      userId: auth.userId,
+      branchId: adm.branch_id,
+      patientId: adm.patient_id,
+      admissionId: input.admissionId,
+    });
+    await audit({
+      actorUserId: auth.userId,
+      action: 'IPD_DRAFT_INVOICE_CREATED',
+      entity: 'invoices',
+      entityId: result.invoiceId,
+      after: { invoiceNo: result.invoiceNo, admissionId: input.admissionId },
+    });
+    return result;
+  },
+
+  async replaceIpdItems(auth: AuthContext, token: string, invoiceId: string, input: ReplaceInvoiceItemsInput) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const inv = await repo.findInvoiceFull(client, auth.tenantId, invoiceId);
+    if (!inv) throw NotFound('Invoice not found');
+    if (inv.invoice_type !== 'IPD') throw BadRequest('Only IPD invoices can be edited with this endpoint');
+    if (inv.finalized_at) throw Conflict('Invoice is finalized and cannot be edited');
+    const result = await repo.replaceIpdItems(client, {
+      tenantId: auth.tenantId,
+      invoiceId,
+      items: input.items,
+      discount: input.discount,
+    });
+    await audit({
+      actorUserId: auth.userId,
+      action: 'IPD_INVOICE_ITEMS_REPLACED',
+      entity: 'invoices',
+      entityId: invoiceId,
+      after: { itemCount: input.items.length, totalAmount: result.totalAmount },
+    });
+    return result;
+  },
+
+  async getIpdBillByAdmission(auth: AuthContext, token: string, admissionId: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    return repo.getIpdBillByAdmission(client, auth.tenantId, admissionId);
   },
 
   // ---- Per-department invoice views ----

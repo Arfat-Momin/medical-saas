@@ -32,7 +32,9 @@ export const invoiceItemSchema = z.object({
 });
 
 export const createInvoiceSchema = z.object({
-  patientId:   z.string().uuid(),
+  patientId:      z.string().uuid(),
+  ipdAdmissionId: z.string().uuid().nullable().optional(),
+  invoiceType:    z.enum(['COMBINED','DOCTOR','PHARMACY','LAB','IPD']).optional(),
   encounterId: z.string().uuid().nullable().optional(),
   branchId:    z.string().uuid().optional(),
   notes:       z.string().max(1000).nullable().optional(),
@@ -40,8 +42,18 @@ export const createInvoiceSchema = z.object({
   items:       z.array(invoiceItemSchema).min(1),
 });
 
+export const createIpdDraftSchema = z.object({
+  admissionId: z.string().uuid(),
+});
+
+export const replaceInvoiceItemsSchema = z.object({
+  discount: z.coerce.number().nonnegative().default(0),
+  items:    z.array(invoiceItemSchema).default([]),
+});
+
 export const listInvoicesQuerySchema = z.object({
-  patientId: z.string().uuid().optional(),
+  patientId:   z.string().uuid().optional(),
+  invoiceType: z.enum(['COMBINED','DOCTOR','PHARMACY','LAB','IPD']).optional(),
   status:    z.enum(['UNPAID','PARTIAL','PAID','REFUNDED','CANCELLED']).optional(),
   from:      z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to:        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -81,3 +93,5 @@ export type ListInvoicesQuery = z.infer<typeof listInvoicesQuerySchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export type RefundPaymentInput = z.infer<typeof refundPaymentSchema>;
 export type InvoiceFromEncounterInput = z.infer<typeof invoiceFromEncounterSchema>;
+export type ReplaceInvoiceItemsInput = z.infer<typeof replaceInvoiceItemsSchema>;
+export type CreateIpdDraftInput = z.infer<typeof createIpdDraftSchema>;

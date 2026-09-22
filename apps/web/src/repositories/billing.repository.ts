@@ -1,4 +1,4 @@
-﻿import { api } from '@/lib/api';
+import { api } from '@/lib/api';
 
 // ---------- Billable items ----------
 export interface BillableItem {
@@ -73,6 +73,8 @@ export interface Invoice {
     created_at: string;
     updated_at: string;
     finalized_at: string | null;
+    invoice_type?: 'COMBINED' | 'DOCTOR' | 'PHARMACY' | 'LAB' | 'IPD';
+    ipd_admission_id?: string | null;
     patients?: { id: string; uhid: string; full_name: string; mobile: string | null };
     branches?: { id: string; name: string; branch_code: string };
 }
@@ -87,6 +89,8 @@ export interface CreateInvoiceInput {
     patientId: string;
     encounterId?: string | null;
     branchId?: string;
+    invoiceType?: 'COMBINED' | 'DOCTOR' | 'PHARMACY' | 'LAB' | 'IPD';
+    ipdAdmissionId?: string | null;
     notes?: string | null;
     discount: number;
     items: {
@@ -113,7 +117,7 @@ export const billingRepository = {
         api.patch<BillableItem>(`/billing/items/${id}`, patch),
 
     // ---- Invoices ----
-    listInvoices: (params: { patientId?: string; status?: string; from?: string; to?: string; page?: number; pageSize?: number }) => {
+    listInvoices: (params: { patientId?: string; invoiceType?: string; status?: string; from?: string; to?: string; page?: number; pageSize?: number }) => {
         const qs = new URLSearchParams();
         Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });
         return api.get<{ rows: Invoice[]; total: number; page: number; pageSize: number }>(`/billing/invoices?${qs.toString()}`);
@@ -123,6 +127,14 @@ export const billingRepository = {
         api.post<{ invoiceId: string; invoiceNo: string; totalAmount: number }>('/billing/invoices', input),
     invoiceFromEncounter: (input: { encounterId: string; includeConsult?: boolean; includeLab?: boolean; includePharmacy?: boolean; consultationFee?: number }) =>
         api.post<{ invoiceId: string; invoiceNo: string; totalAmount: number }>('/billing/invoices/from-encounter', input),
+
+    // ---- IPD custom bill ----
+    createIpdDraft: (input: { admissionId: string }) =>
+        api.post<{ invoiceId: string; invoiceNo: string; created: boolean }>('/billing/invoices/ipd-draft', input),
+    replaceIpdItems: (invoiceId: string, input: { discount: number; items: any[] }) =>
+        api.put<{ invoiceId: string; totalAmount: number }>(`/billing/invoices/${invoiceId}/items`, input),
+    getIpdBillByAdmission: (admissionId: string) =>
+        api.get<Invoice | null>(`/billing/admissions/${admissionId}/ipd-bill`),
 
     // ---- Payments / Refunds ----
     recordPayment: (invoiceId: string, input: { amount: number; method: string; reference?: string | null; notes?: string | null }) =>
