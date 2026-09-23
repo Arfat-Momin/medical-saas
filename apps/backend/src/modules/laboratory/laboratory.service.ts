@@ -119,11 +119,22 @@ export const laboratoryService = {
       after: { totalAmount: result.totalAmount, testCount: input.testIds.length },
     });
 
+    // Always create / refresh the LAB invoice for this order.
+    // Runs whether or not the order is tied to an encounter, so direct
+    // lab orders show up on the Lab Invoices and Invoices pages.
+    try {
+      await billingService.syncLabInvoice(auth, token, result.orderId);
+    } catch (e) {
+      logger.warn({ orderId: result.orderId, err: e }, 'LAB invoice sync failed');
+    }
+
+    // If this order is tied to an encounter, also refresh the encounter's
+    // combined invoice so DOCTOR / PHARMACY sections stay in sync.
     if (input.encounterId) {
       try {
         await billingService.syncEncounterInvoice(auth, token, input.encounterId);
       } catch (e) {
-        logger.warn({ encounterId: input.encounterId, err: e }, 'Invoice sync after lab order failed');
+        logger.warn({ encounterId: input.encounterId, err: e }, 'Encounter invoice sync after lab order failed');
       }
     }
 

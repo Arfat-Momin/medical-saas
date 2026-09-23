@@ -363,4 +363,50 @@ export const billingService = {
   async listLabInvoices(auth: AuthContext, token: string, q: ListInvoicesQuery) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     return repo.listInvoices(supabaseForUser(token), auth.tenantId, { ...q, invoiceType: 'LAB' });
-  },};
+  },
+
+  // ---- Sync a LAB invoice from a lab order (idempotent) ----
+  // Called whenever a lab order is created, whether or not it is tied to
+  // an encounter. Creates / refreshes the LAB invoice + items, then
+  // rebuilds the patient's COMBINED invoice so the LAB section shows up
+  // on the main invoice page.
+  async syncLabInvoice(auth: AuthContext, token: string, orderId: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+
+    const { data: order, error: oErr } = await client
+      .from('lab_orders')
+      .select('id, patient_id')
+      .eq('tenant_id', auth.tenantId)
+      .eq('id', orderId)
+      .maybeSingle();
+    if (oErr) throw oErr;
+    if (!order) throw NotFound('Lab order not found');
+
+    const { data: invoiceId, error: iErr } = await client.rpc('sync_source_invoice', {
+      p_tenant_id:   auth.tenantId,
+      p_user_id:     auth.userId,
+      p_source_type: 'LAB',
+      p_source_id:   orderId,
+    });
+    if (iErr) {
+      logger.error({ orderId, error: iErr.message }, 'sync_source_invoice(LAB) failed');
+      throw iErr;
+    }
+
+    let combinedInvoiceId: string | null = null;
+    try {
+      const { data: cid, error: cErr } = await client.rpc('sync_combined_invoice', {
+        p_tenant_id:  auth.tenantId,
+        p_user_id:    auth.userId,
+        p_patient_id: order.patient_id,
+      });
+      if (cErr) throw cErr;
+      combinedInvoiceId = (cid as string) ?? null;
+    } catch (e) {
+      logger.warn({ orderId, patientId: order.patient_id, err: e }, 'sync_combined_invoice failed after lab order');
+    }
+
+    return { invoiceId: invoiceId as string, combinedInvoiceId };
+  },
+};
