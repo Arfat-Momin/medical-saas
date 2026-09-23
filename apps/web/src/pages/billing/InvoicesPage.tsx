@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { useInvoices, useCreateInvoice } from '@/hooks/useBilling';
+import { useInvoices, useCreateInvoice, useInvoiceTotals } from '@/hooks/useBilling';
 import { usePatients } from '@/hooks/usePatients';
 import { usePermissions } from '@/hooks/useAuth';
 import { PERMISSIONS } from '@medical/shared';
@@ -37,8 +37,16 @@ export function InvoicesPage() {
   const { can } = usePermissions();
   const [status, setStatus] = useState('');
   const [invoiceType, setInvoiceType] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [singleDate, setSingleDate] = useState('');
+  const [showRange, setShowRange] = useState(false);
   const [page, setPage] = useState(1);
-  const list = useInvoices({ status: status || undefined, invoiceType: invoiceType || undefined, page, pageSize: 20 });
+  const effectiveFrom = showRange ? (from || undefined) : (singleDate || undefined);
+  const effectiveTo   = showRange ? (to   || undefined) : (singleDate || undefined);
+
+  const list = useInvoices({ status: status || undefined, invoiceType: invoiceType || undefined, from: effectiveFrom, to: effectiveTo, page, pageSize: 20 });
+  const totals = useInvoiceTotals({ status: status || undefined, invoiceType: invoiceType || undefined, from: effectiveFrom, to: effectiveTo });
 
   const patients = usePatients({ page: 1, pageSize: 200 });
   const create = useCreateInvoice();
@@ -127,6 +135,103 @@ export function InvoicesPage() {
           <option value="LAB">Lab</option>
           <option value="IPD">IPD</option>
         </Select>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        {!showRange && (
+          <div className="w-44">
+            <Input
+              label="Date"
+              type="date"
+              value={singleDate}
+              onChange={(e) => {
+                setSingleDate(e.target.value);
+                setShowRange(false);
+                setFrom('');
+                setTo('');
+                setPage(1);
+              }}
+            />
+          </div>
+        )}
+
+        {showRange && (
+          <>
+            <div className="w-40">
+              <Input
+                label="From"
+                type="date"
+                value={from}
+                onChange={(e) => {
+                  setFrom(e.target.value);
+                  setSingleDate('');
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="w-40">
+              <Input
+                label="To"
+                type="date"
+                value={to}
+                onChange={(e) => {
+                  setTo(e.target.value);
+                  setSingleDate('');
+                  setPage(1);
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            if (showRange) {
+              setShowRange(false);
+              setFrom('');
+              setTo('');
+            } else {
+              setShowRange(true);
+              setSingleDate('');
+            }
+            setPage(1);
+          }}
+        >
+          {showRange ? 'Single date' : 'Range'}
+        </Button>
+
+        {(singleDate || from || to) && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setSingleDate('');
+              setFrom('');
+              setTo('');
+              setShowRange(false);
+              setPage(1);
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Card className="p-4">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Collected</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums text-green-700">
+            {totals.isLoading ? '...' : `Rs.${(totals.data?.collected_amount ?? 0).toFixed(2)}`}
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Pending</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums text-red-600">
+            {totals.isLoading ? '...' : `Rs.${(totals.data?.pending_amount ?? 0).toFixed(2)}`}
+          </div>
+        </Card>
       </div>
 
       {list.isLoading && <div className="flex justify-center py-12"><Spinner size={28} /></div>}

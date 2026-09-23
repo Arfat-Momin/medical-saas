@@ -24,6 +24,13 @@ export function useUpdateBillableItem() {
 export function useInvoices(params: { patientId?: string; invoiceType?: string; status?: string; from?: string; to?: string; page?: number; pageSize?: number }) {
   return useQuery({ queryKey: [...INVOICES, params], queryFn: () => repo.listInvoices(params) });
 }
+
+export function useInvoiceTotals(params: { patientId?: string; invoiceType?: string; status?: string; from?: string; to?: string }) {
+  return useQuery({
+    queryKey: [...INVOICES, 'totals', params],
+    queryFn: () => repo.getInvoiceTotals(params),
+  });
+}
 export function useInvoice(id: string | undefined) {
   return useQuery({
     queryKey: [...INVOICES, id],

@@ -54,6 +54,10 @@ export const billingService = {
     if (!auth.tenantId) throw NotFound('No tenant context');
     return repo.listInvoices(supabaseForUser(token), auth.tenantId, q);
   },
+  async getInvoiceTotals(auth: AuthContext, token: string, q: ListInvoicesQuery) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    return repo.getInvoiceTotals(supabaseForUser(token), auth.tenantId, q);
+  },
   async getInvoice(auth: AuthContext, token: string, id: string) {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const inv = await repo.findInvoiceFull(supabaseForUser(token), auth.tenantId, id);
@@ -164,7 +168,12 @@ export const billingService = {
     const parent = await repo.findInvoiceFull(client, auth.tenantId, invoiceId);
     if (!parent) throw NotFound('Invoice not found');
 
-    const rows = await repo.listSubInvoicesForPatient(client, auth.tenantId, parent.patient_id);
+    const rows = await repo.listSubInvoicesForPatient(
+      client,
+      auth.tenantId,
+      parent.patient_id,
+      (parent as any).encounter_id ?? null,
+    );
     return { rows };
   },
 
@@ -376,7 +385,7 @@ export const billingService = {
 
     const { data: order, error: oErr } = await client
       .from('lab_orders')
-      .select('id, patient_id')
+      .select('id, patient_id, encounter_id')
       .eq('tenant_id', auth.tenantId)
       .eq('id', orderId)
       .maybeSingle();
@@ -397,9 +406,10 @@ export const billingService = {
     let combinedInvoiceId: string | null = null;
     try {
       const { data: cid, error: cErr } = await client.rpc('sync_combined_invoice', {
-        p_tenant_id:  auth.tenantId,
-        p_user_id:    auth.userId,
-        p_patient_id: order.patient_id,
+        p_tenant_id:   auth.tenantId,
+        p_user_id:     auth.userId,
+        p_patient_id:  order.patient_id,
+        p_encounter_id: order.encounter_id ?? null,
       });
       if (cErr) throw cErr;
       combinedInvoiceId = (cid as string) ?? null;

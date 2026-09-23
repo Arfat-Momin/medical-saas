@@ -80,6 +80,31 @@ export const billingRepository = {
     return { rows: data ?? [], total: count ?? 0, page: opts.page, pageSize: opts.pageSize };
   },
 
+  async getInvoiceTotals(
+    client: SupabaseClient,
+    tenantId: string,
+    opts: {
+      invoiceType?: InvoiceType;
+      patientId?: string;
+      status?: string;
+      from?: string;
+      to?: string;
+    },
+  ) {
+    let q = client.from('invoices').select('paid_amount, balance_amount')
+      .eq('tenant_id', tenantId);
+    q = q.eq('invoice_type', opts.invoiceType ?? 'COMBINED');
+    if (opts.patientId) q = q.eq('patient_id', opts.patientId);
+    if (opts.status)    q = q.eq('status', opts.status);
+    if (opts.from)      q = q.gte('created_at', opts.from);
+    if (opts.to)        q = q.lte('created_at', opts.to + 'T23:59:59.999Z');
+    const { data, error } = await q;
+    if (error) throw error;
+    const collected = (data ?? []).reduce((s, r: any) => s + Number(r.paid_amount ?? 0), 0);
+    const pending   = (data ?? []).reduce((s, r: any) => s + Number(r.balance_amount ?? 0), 0);
+    return { collected_amount: collected, pending_amount: pending };
+  },
+
   async findInvoiceFull(client: SupabaseClient, tenantId: string, id: string) {
     const { data: inv, error: e1 } = await client.from('invoices').select(INVOICE_SELECT)
       .eq('tenant_id', tenantId).eq('id', id).maybeSingle();
@@ -198,15 +223,20 @@ export const billingRepository = {
     client: SupabaseClient,
     tenantId: string,
     patientId: string,
+    encounterId?: string | null,
   ) {
-    const { data, error } = await client
+    let q = client
       .from('invoices')
       .select(INVOICE_SELECT)
       .eq('tenant_id', tenantId)
       .eq('patient_id', patientId)
       .in('invoice_type', ['DOCTOR', 'PHARMACY', 'LAB'])
-      .neq('status', 'CANCELLED')
-      .order('created_at', { ascending: false });
+      .neq('status', 'CANCELLED');
+    // When the parent COMBINED invoice belongs to a specific visit,
+    // only show that visit's sub-invoices. When null, fall back to
+    // the old patient-scoped behavior for legacy combined invoices.
+    if (encounterId) q = q.eq('encounter_id', encounterId);
+    const { data, error } = await q.order('created_at', { ascending: false });
     if (error) throw error;
     return data ?? [];
   },

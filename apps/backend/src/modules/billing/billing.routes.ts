@@ -45,6 +45,13 @@ billingRouter.get('/invoices',
     res.json(await billingService.listInvoices(req.auth!, getAccessToken(req), q));
   }),
 );
+billingRouter.get('/invoices/totals',
+  requirePermission(PERMISSIONS.BILLING_READ),
+  asyncHandler(async (req, res) => {
+    const q = listInvoicesQuerySchema.parse(req.query);
+    res.json(await billingService.getInvoiceTotals(req.auth!, getAccessToken(req), q));
+  }),
+);
 billingRouter.get('/invoices/:id',
   requirePermission(PERMISSIONS.BILLING_READ),
   asyncHandler(async (req, res) => {

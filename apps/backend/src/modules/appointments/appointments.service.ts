@@ -4,8 +4,48 @@ import { billingRepository } from '../billing/billing.repository.js';
 import { BadRequest, Conflict, NotFound } from '../../utils/errors.js';
 import { assertNoConflict } from '../../utils/conflict.js';
 import { audit } from '../../middleware/audit.js';
+import { billingService } from '../billing/billing.service.js';
+import { logger } from '../../config/logger.js';
 import type { AuthContext } from '@medical/shared';
 import type { CreateAppointmentInput, ListAppointmentsQuery } from './appointments.validators.js';
+
+/**
+ * Find or create the OPD encounter for an appointment.
+ * Used by checkIn so the DOCTOR invoice is issued before the consultation.
+ */
+async function ensureOpdEncounterForAppointment(
+  client: any,
+  auth: AuthContext,
+  appt: any,
+  appointmentId: string,
+): Promise<any> {
+  const { data: existing } = await client
+    .from('encounters')
+    .select('*')
+    .eq('tenant_id', auth.tenantId!)
+    .eq('appointment_id', appointmentId)
+    .maybeSingle();
+  if (existing) return existing;
+
+  const { data, error } = await client
+    .from('encounters')
+    .insert({
+      tenant_id: auth.tenantId,
+      branch_id: appt.branch_id,
+      patient_id: appt.patient_id,
+      doctor_id: appt.doctor_id,
+      appointment_id: appointmentId,
+      encounter_type: 'OPD',
+      encounter_date: appt.appointment_date,
+      chief_complaint: appt.chief_complaint,
+      status: 'DRAFT',
+      created_by: auth.userId,
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
 
 export const appointmentsService = {
   async list(auth: AuthContext, token: string, query: ListAppointmentsQuery) {
@@ -141,6 +181,18 @@ export const appointmentsService = {
       status: 'CHECKED_IN',
       queue_token: token_num,
     });
+
+    // Generate the DOCTOR invoice now, before the consultation begins.
+    // Idempotent: it is refreshed again when the consultation completes.
+    try {
+      const encounter = await ensureOpdEncounterForAppointment(client, auth, appt, id);
+      await billingService.syncEncounterInvoice(auth, token, encounter.id);
+    } catch (e: any) {
+      logger.warn(
+        { appointmentId: id, err: e?.message ?? String(e) },
+        'Doctor invoice sync failed at check-in',
+      );
+    }
 
     await audit({
       actorUserId: auth.userId,

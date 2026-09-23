@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { usePatientEncounters, useServerEncounter } from '@/hooks/usePatientEncounters';
 import { useAuthStore } from '@/stores/auth.store';
+import { ConsultationImages } from '@/components/ConsultationImages';
 
 interface Props {
   patientId: string;
@@ -243,6 +244,10 @@ function EncounterRow({
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{enc.notes}</p>
                 </Section>
               )}
+
+              <Section title="Attachments">
+                <ConsultationImages encounterId={summary.id} editable={false} />
+              </Section>
 
               {/* Admin-only correction entry point */}
               {isHospitalAdmin && (

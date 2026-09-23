@@ -122,6 +122,11 @@ export const billingRepository = {
         Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });
         return api.get<{ rows: Invoice[]; total: number; page: number; pageSize: number }>(`/billing/invoices?${qs.toString()}`);
     },
+    getInvoiceTotals: (params: { patientId?: string; invoiceType?: string; status?: string; from?: string; to?: string }) => {
+        const qs = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)); });
+        return api.get<{ collected_amount: number; pending_amount: number }>(`/billing/invoices/totals?${qs.toString()}`);
+    },
     getInvoice: (id: string) => api.get<InvoiceFull>(`/billing/invoices/${id}`),
     createInvoice: (input: CreateInvoiceInput) =>
         api.post<{ invoiceId: string; invoiceNo: string; totalAmount: number }>('/billing/invoices', input),

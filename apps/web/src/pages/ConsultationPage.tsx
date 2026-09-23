@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Plus, Save, Trash2, Activity, FileText, Stethoscope, Pill, CheckCircle2, FlaskConical, Printer,
+  ArrowLeft, Plus, Save, Trash2, Activity, FileText, Stethoscope, Pill, CheckCircle2, FlaskConical, Printer, Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -16,6 +16,7 @@ import { useOrganization } from '@/hooks/useOrganization';
 import { LabTestPicker } from '@/components/LabTestPicker';
 import { MedicinePicker } from '@/components/MedicinePicker';
 import { PrintPreviewModal } from '@/components/PrintPreviewModal';
+import { ConsultationImages } from '@/components/ConsultationImages';
 import { PrescriptionPrint } from '@/components/print/PrescriptionPrint';
 import type { VitalsData, DiagnosisData, PrescriptionItemData, LabTestData } from '@/db/schema';
 
@@ -510,6 +511,18 @@ export function ConsultationPage() {
               onChange={(ev) => setNotes(ev.target.value)}
               placeholder="Free-text notes"
             />
+          </CardBody>
+        </Card>
+
+        {/* ATTACHMENTS */}
+        <Card>
+          <CardHeader
+            title="Attachments"
+            subtitle="Photos of prescriptions or documents"
+            action={<Camera size={16} className="text-slate-400" />}
+          />
+          <CardBody>
+            <ConsultationImages encounterId={e.server_id} editable />
           </CardBody>
         </Card>
       </fieldset>

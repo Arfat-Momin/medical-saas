@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { MedicinePicker } from '@/components/MedicinePicker';
 import { useAdminEncounter, useAdminEditPrescription } from '@/hooks/useEncounter';
 import { useAuthStore } from '@/stores/auth.store';
+import { ConsultationImages } from '@/components/ConsultationImages';
 import type { PrescriptionItemData } from '@/db/schema';
 
 const FREQUENCIES = [
@@ -304,6 +305,16 @@ export function EditPrescriptionPage() {
             onChange={(ev) => setRxNotes(ev.target.value)}
             placeholder="Any additional instructions"
           />
+        </CardBody>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader
+          title="Attachments"
+          subtitle="Photos attached to this consultation"
+        />
+        <CardBody>
+          <ConsultationImages encounterId={e.id} editable={false} />
         </CardBody>
       </Card>
 

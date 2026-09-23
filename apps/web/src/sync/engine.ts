@@ -72,11 +72,16 @@ const handlers: Record<string, Handler> = {
 
   async appointments(item, payload) {
     if (item.operation === 'create') {
-      if (!payload.patientId) throw new Error('Waiting for patient to sync first');
+      let patientId = payload.patientId;
+      if (!patientId && payload.patientLocalId) {
+        const localPatient = await db.patients.get(payload.patientLocalId);
+        patientId = localPatient?.server_id ?? null;
+      }
+      if (!patientId) throw new Error('Waiting for patient to sync first');
       const res = await api.post<{ id: string; queue_token: number | null; updated_at: string }>(
         '/appointments',
         {
-          patientId: payload.patientId,
+          patientId,
           doctorId: payload.doctorId,
           appointmentDate: payload.appointmentDate,
           slotTime: payload.slotTime ?? undefined,
@@ -148,10 +153,15 @@ const handlers: Record<string, Handler> = {
         );
         serverId = startRes.id;
       } else {
-        if (!local.patient_server_id) throw new Error('Waiting for patient to sync first');
+        let patientServerId = local.patient_server_id;
+        if (!patientServerId && local.patient_local_id) {
+          const patient = await db.patients.get(local.patient_local_id);
+          patientServerId = patient?.server_id ?? null;
+        }
+        if (!patientServerId) throw new Error('Waiting for patient to sync first');
         const startRes = await api.post<{ id: string }>(
           '/opd/encounters',
-          { patientId: local.patient_server_id, doctorId: local.doctor_id, chiefComplaint: local.chief_complaint ?? null },
+          { patientId: patientServerId, doctorId: local.doctor_id, chiefComplaint: local.chief_complaint ?? null },
           { idempotencyKey: item.idempotency_key, deviceId: item.device_id },
         );
         serverId = startRes.id;

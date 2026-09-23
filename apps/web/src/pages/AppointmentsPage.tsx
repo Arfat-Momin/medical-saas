@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAppointments, useCreateAppointment, useCheckIn } from '@/hooks/useAppointments';
-import { usePatients } from '@/hooks/usePatients';
+import { usePatients, useCreatePatient } from '@/hooks/usePatients';
 import { doctorsRepository, type Doctor } from '@/repositories/doctors.repository';
 import { encountersRepository } from '@/repositories/encounters.repository';
 import { usePermissions } from '@/hooks/useAuth';
@@ -55,6 +55,15 @@ export function AppointmentsPage() {
 
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [patientMode, setPatientMode] = useState<'existing' | 'new'>('existing');
+  const [newPatient, setNewPatient] = useState({
+    fullName: '',
+    dateOfBirth: '',
+    gender: '',
+    mobile: '',
+    bloodGroup: '',
+  });
+  const createPatient = useCreatePatient();
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormValues>({
     defaultValues: { patientId: '', doctorId: '', appointmentDate: today, slotTime: '', chiefComplaint: '' },
@@ -93,13 +102,39 @@ export function AppointmentsPage() {
   async function onSubmit(values: FormValues) {
     setError(null);
     try {
+      let patientId = values.patientId;
+
+      if (patientMode === 'new') {
+        if (!newPatient.fullName.trim()) {
+          setError('Patient name is required');
+          return;
+        }
+
+        const patient = await createPatient.mutateAsync({
+          fullName: newPatient.fullName.trim(),
+          dateOfBirth: newPatient.dateOfBirth || null,
+          gender: (newPatient.gender || null) as 'MALE' | 'FEMALE' | 'OTHER' | null,
+          mobile: newPatient.mobile || null,
+          bloodGroup: (newPatient.bloodGroup || null) as
+            | 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-'
+            | null,
+        });
+
+        patientId = patient.local_id;
+      }
+
+      if (!patientId) {
+        setError('Select patient');
+        return;
+      }
+
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Save took too long - please retry.')), 10_000),
       );
 
       await Promise.race([
         create.mutateAsync({
-          patientId: values.patientId,
+          patientId,
           doctorId: values.doctorId,
           appointmentDate: values.appointmentDate,
           slotTime: values.slotTime || undefined,
@@ -109,6 +144,8 @@ export function AppointmentsPage() {
       ]);
 
       reset({ patientId: '', doctorId: '', appointmentDate: today, slotTime: '', chiefComplaint: '' });
+      setNewPatient({ fullName: '', dateOfBirth: '', gender: '', mobile: '', bloodGroup: '' });
+      setPatientMode('existing');
       setOpen(false);
     } catch (e: any) {
       setError(e?.message ?? 'Failed to create appointment');
@@ -417,12 +454,26 @@ export function AppointmentsPage() {
       {/* New appointment modal */}
       <Modal
         open={open}
-        onClose={() => { setOpen(false); reset(); setError(null); }}
+        onClose={() => {
+          setOpen(false);
+          reset();
+          setError(null);
+          setPatientMode('existing');
+          setNewPatient({ fullName: '', dateOfBirth: '', gender: '', mobile: '', bloodGroup: '' });
+        }}
         title="New appointment"
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setOpen(false); reset(); }}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setOpen(false);
+                reset();
+                setPatientMode('existing');
+                setNewPatient({ fullName: '', dateOfBirth: '', gender: '', mobile: '', bloodGroup: '' });
+              }}
+            >
               Cancel
             </Button>
             <Button form="appt-form" type="submit" loading={isSubmitting}>
@@ -434,14 +485,87 @@ export function AppointmentsPage() {
         <form id="appt-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {error && <Alert tone="error">{error}</Alert>}
 
-          <Select label="Patient *" {...register('patientId', { required: true })}>
-            <option value="">- Select patient -</option>
-            {patients.data?.rows.map((p) => (
-              <option key={p.local_id} value={p.local_id}>
-                {p.uhid} - {p.full_name}
-              </option>
-            ))}
-          </Select>
+          <div className="flex gap-2 rounded-lg border border-slate-200 p-1">
+            <button
+              type="button"
+              onClick={() => setPatientMode('existing')}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${
+                patientMode === 'existing'
+                  ? 'bg-brand-500 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Existing patient
+            </button>
+            <button
+              type="button"
+              onClick={() => setPatientMode('new')}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium ${
+                patientMode === 'new'
+                  ? 'bg-brand-500 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              New patient
+            </button>
+          </div>
+
+          {patientMode === 'existing' ? (
+            <Select label="Patient *" {...register('patientId', { required: true })}>
+              <option value="">- Select patient -</option>
+              {patients.data?.rows.map((p) => (
+                <option key={p.local_id} value={p.local_id}>
+                  {p.uhid} - {p.full_name}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <>
+              <Input
+                label="Full name *"
+                value={newPatient.fullName}
+                onChange={(e) => setNewPatient({ ...newPatient, fullName: e.target.value })}
+                placeholder="Rahul Sharma"
+              />
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label="Date of birth"
+                  type="date"
+                  value={newPatient.dateOfBirth}
+                  onChange={(e) => setNewPatient({ ...newPatient, dateOfBirth: e.target.value })}
+                />
+                <Select
+                  label="Gender"
+                  value={newPatient.gender}
+                  onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}
+                >
+                  <option value="">-</option>
+                  <option value="MALE">Male</option>
+                  <option value="FEMALE">Female</option>
+                  <option value="OTHER">Other</option>
+                </Select>
+              </div>
+
+              <Input
+                label="Mobile"
+                value={newPatient.mobile}
+                onChange={(e) => setNewPatient({ ...newPatient, mobile: e.target.value })}
+                placeholder="9876543210"
+              />
+
+              <Select
+                label="Blood group"
+                value={newPatient.bloodGroup}
+                onChange={(e) => setNewPatient({ ...newPatient, bloodGroup: e.target.value })}
+              >
+                <option value="">-</option>
+                {['A+','A-','B+','B-','AB+','AB-','O+','O-'].map((bg) => (
+                  <option key={bg} value={bg}>{bg}</option>
+                ))}
+              </Select>
+            </>
+          )}
 
           <Select label="Doctor *" {...register('doctorId', { required: true })}>
             <option value="">- Select doctor -</option>
