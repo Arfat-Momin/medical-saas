@@ -4,8 +4,6 @@ import {
   fetchDoctorInvoicesForAppointments,
   type CreateAppointmentInput,
 } from '@/repositories/appointments.repository';
-import { triggerSyncNow } from '@/sync/listeners';
-
 import { useAuthStore } from '@/stores/auth.store';
 const KEY = ['appointments'];
 
@@ -55,11 +53,9 @@ export function useAppointments(params: {
 export function useCreateAppointment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateAppointmentInput) => {
-      const result = await appointmentsRepository.create(input);
-      await triggerSyncNow().catch(() => {});
-      return result;
-    },
+    // queue.ts enqueue() fires a non-blocking sync immediately when online.
+    // No blocking await here — the UI returns instantly, sync runs in background.
+    mutationFn: (input: CreateAppointmentInput) => appointmentsRepository.create(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }
@@ -67,11 +63,7 @@ export function useCreateAppointment() {
 export function useCheckIn() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const result = await appointmentsRepository.checkIn(id);
-      await triggerSyncNow().catch(() => {});
-      return result;
-    },
+    mutationFn: (id: string) => appointmentsRepository.checkIn(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }
@@ -79,11 +71,8 @@ export function useCheckIn() {
 export function useUpdateAppointmentStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const result = await appointmentsRepository.updateStatus(id, status as any);
-      await triggerSyncNow().catch(() => {});
-      return result;
-    },
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      appointmentsRepository.updateStatus(id, status as any),
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }

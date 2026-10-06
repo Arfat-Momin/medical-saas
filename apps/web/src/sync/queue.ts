@@ -28,6 +28,24 @@ export const syncQueue = {
       created_at: now,
     };
     await db.queue.add(item);
+
+    // When online, immediately push to the server without waiting for the
+    // 20-second polling interval. The syncEngine.running guard prevents
+    // parallel runs. Lazy import breaks the engine → queue → engine cycle.
+    if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+      void import('./engine').then(({ syncEngine }) => {
+        if (!syncEngine.running) {
+          void syncEngine.run().then(() => {
+            // After push, invalidate React Query caches so the UI reflects
+            // the synced state (e.g., UHID appears, server_id resolves).
+            void import('@/lib/queryClient').then(({ queryClient }) => {
+              queryClient.invalidateQueries();
+            });
+          });
+        }
+      });
+    }
+
     return item.idempotency_key;
   },
 
