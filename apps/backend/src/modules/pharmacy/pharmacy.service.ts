@@ -10,7 +10,7 @@ import type {
   CreateMedicineInput, UpdateMedicineInput,
   CreateSupplierInput, UpdateSupplierInput,
   ReceivePurchaseInput, DispenseInput, AdjustStockInput,
-  ListMedicinesQuery,
+  CreateBatchInput, ListMedicinesQuery,
 } from './pharmacy.validators.js';
 
 export const pharmacyService = {
@@ -105,6 +105,29 @@ export const pharmacyService = {
     if (!auth.tenantId) throw NotFound('No tenant context');
     return repo.listBatches(supabaseForUser(token), auth.tenantId, medicineId, onlyInStock ?? false);
   },
+  async createBatch(auth: AuthContext, token: string, input: CreateBatchInput) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const result = await repo.createBatch(client, {
+      tenantId: auth.tenantId,
+      userId: auth.userId,
+      medicineId: input.medicineId,
+      batchNo: input.batchNo,
+      expiryDate: input.expiryDate,
+      initialQty: input.initialQty,
+      purchasePrice: input.purchasePrice,
+      mrp: input.mrp,
+      sellingPrice: input.sellingPrice,
+    });
+    await audit({
+      actorUserId: auth.userId,
+      action: 'BATCH_CREATED',
+      entity: 'medicine_batches',
+      entityId: result.id,
+      after: { batchNo: input.batchNo, initialQty: input.initialQty },
+    });
+    return result;
+  },
 
   // PURCHASES
   async listPurchases(auth: AuthContext, token: string, page: number, pageSize: number) {
@@ -179,6 +202,20 @@ export const pharmacyService = {
         return { ...result, invoiceId: inv.invoiceId };
       } catch (e) {
         logger.warn({ encounterId: input.encounterId, err: e }, 'Invoice sync after dispense failed');
+      }
+    } else {
+      // Walk-in pharmacy dispense without an encounter
+      try {
+        const { data: invoiceId, error: iErr } = await client.rpc('sync_source_invoice', {
+          p_tenant_id:   auth.tenantId,
+          p_user_id:     auth.userId,
+          p_source_type: 'PHARMACY',
+          p_source_id:   result.dispenseId,
+        });
+        if (iErr) throw iErr;
+        return { ...result, invoiceId: invoiceId as string };
+      } catch (e) {
+        logger.warn({ dispenseId: result.dispenseId, err: e }, 'Walk-in pharmacy invoice sync failed');
       }
     }
 

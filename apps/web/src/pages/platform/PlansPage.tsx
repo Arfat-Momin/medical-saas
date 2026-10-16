@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { usePlans, useCreatePlan, useUpdatePlan } from '@/hooks/usePlatform';
+import { usePlans, useCreatePlan, useUpdatePlan, useCreateCustomTenant } from '@/hooks/usePlatform';
 import type { Plan } from '@/repositories/platform.repository';
 
 const empty = { code: '', name: '', pricePaise: '99900', billingCycle: 'MONTHLY', maxBranches: '3', maxUsers: '20' };
@@ -20,8 +20,10 @@ export function PlansPage() {
   const list = usePlans();
   const create = useCreatePlan();
   const update = useUpdatePlan();
+  const createCustomTenant = useCreateCustomTenant();
 
   const [open, setOpen] = useState(false);
+  const [openCustom, setOpenCustom] = useState(false);
   const [editing, setEditing] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<any>({ defaultValues: empty });
@@ -66,7 +68,12 @@ export function PlansPage() {
       <PageHeader
         title="Subscription Plans"
         subtitle="Data-driven plans - no hard-coded tiering"
-        action={<Button onClick={openCreate}><Plus size={16} /> New plan</Button>}
+        action={
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setOpenCustom(true)}>+ Custom Tenant & Plan</Button>
+            <Button onClick={openCreate}><Plus size={16} /> New plan</Button>
+          </div>
+        }
       />
 
       {list.isLoading && <div className="flex justify-center py-12"><Spinner size={28} /></div>}
@@ -125,6 +132,7 @@ export function PlansPage() {
             <Select label="Billing cycle *" {...register('billingCycle')}>
               <option value="MONTHLY">Monthly</option>
               <option value="YEARLY">Yearly</option>
+              <option value="CUSTOM">Custom</option>
             </Select>
             <Input label="Max branches" type="number" {...register('maxBranches')} />
             <Input label="Max users" type="number" {...register('maxUsers')} />
@@ -134,6 +142,95 @@ export function PlansPage() {
           </p>
         </form>
       </Modal>
+
+      <CustomTenantModal open={openCustom} onClose={() => setOpenCustom(false)} onSuccess={() => setOpenCustom(false)} />
     </>
+  );
+}
+
+function CustomTenantModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+  const create = useCreateCustomTenant();
+  const [error, setError] = useState<string | null>(null);
+  const { register, handleSubmit, watch, formState: { isSubmitting }, reset } = useForm<any>({
+    defaultValues: {
+      tenantName: '', tenantSlug: '', tenantEmail: '', tenantPhone: '',
+      adminFullName: '', adminEmail: '', adminPassword: '',
+      planName: 'Custom Plan', planPricePaise: '0', billingCycle: 'MONTHLY', customTenureDays: '30', maxBranches: '1', maxUsers: '5'
+    }
+  });
+
+  const billingCycle = watch('billingCycle');
+
+  async function onSubmit(v: any) {
+    setError(null);
+    try {
+      const payload = {
+        ...v,
+        planPricePaise: Number(v.planPricePaise),
+        customTenureDays: v.customTenureDays ? Number(v.customTenureDays) : undefined,
+        maxBranches: Number(v.maxBranches),
+        maxUsers: Number(v.maxUsers),
+      };
+      await create.mutateAsync(payload);
+      reset();
+      onSuccess();
+      alert('Custom tenant and plan created successfully! Note down the credentials.');
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to create custom tenant');
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Register Custom Tenant" size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button form="custom-tenant-form" type="submit" loading={isSubmitting || create.isPending}>Register & Subscribe</Button>
+        </>
+      }
+    >
+      <form id="custom-tenant-form" onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {error && <Alert tone="error">{error}</Alert>}
+        
+        <div>
+          <h4 className="mb-3 font-semibold text-slate-800">1. Tenant Details</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input label="Clinic/Hospital Name *" placeholder="Apex Clinic" {...register('tenantName', { required: true })} />
+            <Input label="Subdomain (slug) *" placeholder="apex-clinic" {...register('tenantSlug', { required: true })} />
+            <Input label="Contact Email" type="email" placeholder="hello@apex.com" {...register('tenantEmail')} />
+            <Input label="Contact Phone" placeholder="9876543210" {...register('tenantPhone')} />
+          </div>
+        </div>
+
+        <div>
+          <h4 className="mb-3 font-semibold text-slate-800">2. Admin User Credentials</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Input label="Admin Full Name *" placeholder="Dr. Apex" {...register('adminFullName', { required: true })} />
+            <Input label="Admin Email *" type="email" placeholder="admin@apex.com" {...register('adminEmail', { required: true })} />
+            <Input label="Admin Password *" type="text" placeholder="Secret123" {...register('adminPassword', { required: true, minLength: 6 })} />
+          </div>
+        </div>
+
+        <div>
+          <h4 className="mb-3 font-semibold text-slate-800">3. Custom Plan & Tenure</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Input label="Plan Name *" placeholder="Apex Custom Premium" {...register('planName', { required: true })} />
+            <Input label="Price (paise) *" type="number" {...register('planPricePaise', { required: true })} />
+            <Select label="Billing Cycle *" {...register('billingCycle')}>
+              <option value="MONTHLY">Monthly (30 days)</option>
+              <option value="YEARLY">Yearly (365 days)</option>
+              <option value="CUSTOM">Custom Days</option>
+            </Select>
+            {billingCycle === 'CUSTOM' && (
+              <Input label="Tenure (days) *" type="number" {...register('customTenureDays', { required: true })} />
+            )}
+            <Input label="Max Branches *" type="number" {...register('maxBranches', { required: true })} />
+            <Input label="Max Users *" type="number" {...register('maxUsers', { required: true })} />
+          </div>
+        </div>
+      </form>
+    </Modal>
   );
 }

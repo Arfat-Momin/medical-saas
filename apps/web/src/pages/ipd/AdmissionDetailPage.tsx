@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, BedDouble, Check, ClipboardList, FileText, Pill, Receipt, Stethoscope, UserCog } from 'lucide-react';
+import { ArrowLeft, BedDouble, Check, ClipboardList, FileSignature, FileText, Pill, Receipt, Stethoscope, UserCog } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
+import { AdmissionConsentForm } from './AdmissionConsentForm';
 import {
   useAdmission, useTransferBed, useDischarge,
   useAddNursingNote, useAddDoctorRound, useAddMar, useMarkMar, useBeds,
@@ -25,7 +26,7 @@ const marTone: Record<string, BadgeTone> = {
   SCHEDULED: 'blue', ADMINISTERED: 'green', HELD: 'yellow', REFUSED: 'red', MISSED: 'red',
 };
 
-type Tab = 'overview' | 'notes' | 'rounds' | 'mar' | 'transfers' | 'billing';
+type Tab = 'overview' | 'consent' | 'notes' | 'rounds' | 'mar' | 'transfers' | 'billing';
 
 export function AdmissionDetailPage() {
   const { admissionId } = useParams<{ admissionId: string }>();
@@ -127,7 +128,7 @@ export function AdmissionDetailPage() {
 
       <PageHeader
         title={a.patients?.full_name ?? 'Admission'}
-        subtitle={`${a.patients?.uhid} - Admitted ${new Date(a.admitted_at).toLocaleString()}`}
+        subtitle={`${a.patients?.uhid} | IP: ${a.ip_number ?? '-'} - Admitted ${new Date(a.admitted_at).toLocaleString()}`}
         action={
           <div className="flex items-center gap-2">
             <Badge tone={statusTone[a.status] ?? 'gray'} className="px-3 py-1.5 text-sm">{a.status}</Badge>
@@ -159,9 +160,10 @@ export function AdmissionDetailPage() {
 
       {/* Tabs */}
       <div className="mb-4 border-b border-slate-200">
-        <nav className="-mb-px flex gap-6">
+        <nav className="-mb-px flex gap-6 overflow-x-auto">
           {([
             ['overview', 'Overview', FileText],
+            ['consent', 'Consent form', FileSignature],
             ['notes', 'Nursing notes', ClipboardList],
             ['rounds', 'Doctor rounds', Stethoscope],
             ['mar', 'MAR', Pill],
@@ -171,7 +173,7 @@ export function AdmissionDetailPage() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                 tab === key ? 'border-brand-500 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -197,6 +199,11 @@ export function AdmissionDetailPage() {
             )}
           </CardBody>
         </Card>
+      )}
+
+      {/* Tab: Consent Form */}
+      {tab === 'consent' && (
+        <AdmissionConsentForm admission={a} canManage={canManage} />
       )}
 
       {/* Tab: Notes */}

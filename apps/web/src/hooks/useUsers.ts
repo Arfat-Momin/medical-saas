@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usersRepository, type InviteUserInput } from '@/repositories/users.repository';
+import { readData } from '@/lib/dataService';
 
 const KEY = ['users'];
 
@@ -12,9 +13,17 @@ export interface UseUsersParams {
 }
 
 export function useUsers(params: UseUsersParams) {
+  const cacheKey = `users-${JSON.stringify(params)}`;
   return useQuery({
     queryKey: [...KEY, params],
-    queryFn: () => usersRepository.list(params),
+    queryFn: () =>
+      readData(
+        () => usersRepository.list(params),
+        () => Promise.resolve({ rows: [], total: 0, page: params.page ?? 1, pageSize: params.pageSize ?? 20 } as Awaited<ReturnType<typeof usersRepository.list>>),
+        cacheKey,
+        30_000,
+      ),
+    staleTime: 30_000,
   });
 }
 

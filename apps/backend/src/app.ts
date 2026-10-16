@@ -32,6 +32,8 @@ import { billingRouter } from './modules/billing/billing.routes.js';
 import { ipdRouter } from './modules/ipd/ipd.routes.js';
 import { platformAdminRouter } from './modules/platform-admin/platform-admin.routes.js';
 import { syncRouter } from './modules/sync/sync.routes.js';
+import financeRouter from './modules/finance/finance.routes.js';
+import { aiRouter } from './modules/ai/ai.routes.js';
 
 export function createApp() {
   const app = express();
@@ -138,6 +140,8 @@ export function createApp() {
   api.use('/laboratory',    requireTenant, laboratoryRouter);
   api.use('/billing',       requireTenant, billingRouter);
   api.use('/ipd',           requireTenant, ipdRouter);
+  api.use('/finance',       requireTenant, financeRouter);
+  api.use('/ai',            requireTenant, aiRouter);
 
   app.use('/api/v1', api);
 

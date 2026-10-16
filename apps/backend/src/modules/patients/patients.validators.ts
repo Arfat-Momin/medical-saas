@@ -14,6 +14,19 @@ export const createPatientSchema = z.object({
   medicalHistory:  nullableString(2000),
   emergencyContact:nullableString(200),
   branchId:        z.string().uuid().optional(), // default = user's primary branch
+  registrationAmount: z.number().optional().nullable(),
+  regPaymentMode:  z.enum(['CASH','CARD','UPI','CHEQUE','NEFT_RTGS']).nullable().optional(),
+  regPaymentDate:  z.string().optional().nullable(),
+  regReceiptNo:    nullableString(100),
+  coverageType:    z.enum(['NONE','GOVERNMENT_POLICY','MEDICLAIM_INSURANCE','PACKAGE','SWASTHYA_SATHI','OTHER']).nullable().optional(),
+  coverageProvider:nullableString(200),
+  policyNumber:    nullableString(100),
+  coverageValidity:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  coverageNotes:   nullableString(1000),
+  firstVisitReason:nullableString(1000),
+  firstDoctorId:   z.string().uuid().nullable().optional(),
+  firstDepartmentId: z.string().uuid().nullable().optional(),
+  firstVisitAt:    z.string().optional().nullable(),
 });
 
 export const updatePatientSchema = createPatientSchema.partial().omit({ branchId: true });

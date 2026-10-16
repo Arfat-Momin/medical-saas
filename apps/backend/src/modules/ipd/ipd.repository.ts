@@ -2,8 +2,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const ADMISSION_SELECT = `
   id, tenant_id, branch_id, patient_id, bed_id, admitting_doctor,
-  admitted_at, expected_discharge, discharged_at, status,
+  ip_number, admitted_at, expected_discharge, discharged_at, status,
   reason, diagnosis, notes, discharge_summary, discharge_type,
+  consent_signature, consent_signed_at,
   created_at, updated_at,
   patients:patient_id ( id, uhid, full_name, mobile, date_of_birth, gender ),
   doctors:admitting_doctor ( id, full_name ),
@@ -165,6 +166,52 @@ export const ipdRepository = {
     const { data, error } = await client.from('branches').select('id')
       .eq('tenant_id', tenantId).eq('is_active', true)
       .order('branch_code').limit(1).maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async signConsent(client: SupabaseClient, tenantId: string, admissionId: string, signature: string) {
+    const { data, error } = await client
+      .from('admissions')
+      .update({
+        consent_signature: signature,
+        consent_signed_at: new Date().toISOString(),
+      })
+      .eq('tenant_id', tenantId)
+      .eq('id', admissionId)
+      .select(ADMISSION_SELECT)
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  // ---- IPD Pricing ----
+  async listIpdPricing(client: SupabaseClient, tenantId: string, opts: { branchId?: string; category?: string; isActive?: boolean }) {
+    let q = client.from('ipd_pricing').select('*').eq('tenant_id', tenantId).order('category').order('name');
+    if (opts.branchId !== undefined) q = q.eq('branch_id', opts.branchId);
+    if (opts.category !== undefined) q = q.eq('category', opts.category);
+    if (opts.isActive !== undefined) q = q.eq('is_active', opts.isActive);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data ?? [];
+  },
+  async createIpdPricing(client: SupabaseClient, payload: Record<string, unknown>) {
+    const { data, error } = await client.from('ipd_pricing').insert(payload).select('*').single();
+    if (error) throw error;
+    return data;
+  },
+  async updateIpdPricing(client: SupabaseClient, tenantId: string, id: string, patch: Record<string, unknown>) {
+    const { data, error } = await client.from('ipd_pricing').update(patch).eq('tenant_id', tenantId).eq('id', id).select('*').single();
+    if (error) throw error;
+    return data;
+  },
+  async findIpdPricing(client: SupabaseClient, tenantId: string, id: string) {
+    const { data } = await client.from('ipd_pricing').select('*').eq('tenant_id', tenantId).eq('id', id).maybeSingle();
+    return data;
+  },
+  async deleteIpdPricing(client: SupabaseClient, tenantId: string, id: string) {
+    // Soft-delete — set is_active = false
+    const { data, error } = await client.from('ipd_pricing').update({ is_active: false }).eq('tenant_id', tenantId).eq('id', id).select('*').single();
     if (error) throw error;
     return data;
   },

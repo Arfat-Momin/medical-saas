@@ -4,7 +4,7 @@ import { logger } from '../../config/logger.js';
 export const subscriptionsRepository = {
   async listActivePlans(client: SupabaseClient) {
     const { data, error } = await client.from('plans')
-      .select('*').eq('is_active', true).order('price_paise');
+      .select('*').eq('is_active', true).eq('is_custom', false).order('price_paise');
     if (error) throw error;
     return data ?? [];
   },

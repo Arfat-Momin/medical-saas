@@ -41,6 +41,11 @@ export function LabOrdersPage() {
   const [priority, setPriority] = useState<'ROUTINE'|'URGENT'|'STAT'>('ROUTINE');
   const [notes, setNotes] = useState('');
   const [selectedTests, setSelectedTests] = useState<string[]>([]);
+  
+  const [isWalkIn, setIsWalkIn] = useState(false);
+  const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
+
 
   const canOrder = can(PERMISSIONS.LAB_ORDER);
 
@@ -50,14 +55,32 @@ export function LabOrdersPage() {
 
   async function onCreate() {
     setError(null);
-    if (!patientId || !doctorId) { setError('Select patient and doctor'); return; }
+    let finalPatientId = patientId;
+
+    if (isWalkIn) {
+      if (!walkInName.trim()) { setError('Enter walk-in patient name'); return; }
+    } else {
+      if (!patientId) { setError('Select a patient'); return; }
+    }
+
+    if (!doctorId) { setError('Select a doctor'); return; }
     if (selectedTests.length === 0) { setError('Select at least one test'); return; }
+
     try {
+      if (isWalkIn) {
+        const { id } = await import('@/lib/api').then(m => m.api.post<{id:string}>('/patients', {
+          fullName: walkInName.trim(),
+          mobile: walkInPhone.trim() || null,
+        }));
+        finalPatientId = id;
+      }
+
       await create.mutateAsync({
-        patientId, doctorId, priority, notes: notes || null, testIds: selectedTests,
+        patientId: finalPatientId, doctorId, priority, notes: notes || null, testIds: selectedTests,
       });
       setOpen(false);
       setPatientId(''); setDoctorId(''); setSelectedTests([]); setNotes(''); setPriority('ROUTINE');
+      setIsWalkIn(false); setWalkInName(''); setWalkInPhone('');
     } catch (e: any) { setError(e?.message ?? 'Failed to create order'); }
   }
 
@@ -159,21 +182,33 @@ export function LabOrdersPage() {
           {error && <Alert tone="error">{error}</Alert>}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Select label="Patient *" value={patientId} onChange={(e) => setPatientId(e.target.value)}>
-              <option value="">- select -</option>
-              {patients.data?.rows.map((p) => {
-                // HF-1: submit the SERVER patient id, not the local Dexie id.
-                // Local-only patients (server_id null) are disabled with a hint
-                // so the FK on lab_orders.patient_id is never violated.
-                const serverId = p.server_id ?? '';
-                const isSyncing = !serverId;
-                return (
-                  <option key={p.id} value={serverId} disabled={isSyncing}>
-                    {p.uhid} | {p.full_name}{isSyncing ? ' (syncing…)' : ''}
-                  </option>
-                );
-              })}
-            </Select>
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between items-end">
+                <label className="text-xs font-semibold text-slate-700">Patient *</label>
+                <button type="button" onClick={() => setIsWalkIn(!isWalkIn)} className="text-[10px] text-brand-600 hover:underline">
+                  {isWalkIn ? 'Select existing' : '+ Walk-in'}
+                </button>
+              </div>
+              {isWalkIn ? (
+                <div className="flex gap-2">
+                  <Input value={walkInName} onChange={(e) => setWalkInName(e.target.value)} placeholder="Name *" className="flex-1" />
+                  <Input value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} placeholder="Phone" className="w-24" />
+                </div>
+              ) : (
+                <Select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+                  <option value="">- select -</option>
+                  {patients.data?.rows.map((p) => {
+                    const serverId = p.server_id ?? '';
+                    const isSyncing = !serverId;
+                    return (
+                      <option key={p.id} value={serverId} disabled={isSyncing}>
+                        {p.uhid} | {p.full_name}{isSyncing ? ' (syncing…)' : ''}
+                      </option>
+                    );
+                  })}
+                </Select>
+              )}
+            </div>
             <Select label="Ordering doctor *" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
               <option value="">- select -</option>
               {doctors.data?.rows.map((r) => <option key={r.user_id} value={r.user_id}>{r.users.full_name}</option>)}

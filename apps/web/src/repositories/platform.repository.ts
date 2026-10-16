@@ -1,4 +1,4 @@
-﻿import { api } from '@/lib/api';
+import { api } from '@/lib/api';
 
 export type TenantStatus = 'TRIAL' | 'ACTIVE' | 'GRACE' | 'SUSPENDED' | 'CANCELLED';
 
@@ -92,4 +92,7 @@ export const platformRepository = {
     api.post<Plan>('/platform/plans', input),
   updatePlan: (id: string, patch: Partial<Plan> & { pricePaise?: number; billingCycle?: string; maxBranches?: number; maxUsers?: number; isActive?: boolean }) =>
     api.patch<Plan>(`/platform/plans/${id}`, patch),
+
+  createCustomTenant: (input: any) =>
+    api.post<any>('/platform/custom-tenant', input),
 };

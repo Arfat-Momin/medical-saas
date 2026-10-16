@@ -1,4 +1,4 @@
-﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { platformRepository as repo } from '@/repositories/platform.repository';
 
 const DASH    = ['platform', 'dashboard'];
@@ -54,5 +54,17 @@ export function useUpdatePlan() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: any }) => repo.updatePlan(id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: PLANS }),
+  });
+}
+
+export function useCreateCustomTenant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: repo.createCustomTenant,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TENANTS });
+      qc.invalidateQueries({ queryKey: PLANS });
+      qc.invalidateQueries({ queryKey: DASH });
+    }
   });
 }

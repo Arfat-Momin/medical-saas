@@ -7,7 +7,7 @@ import { useInvoice } from '@/hooks/useBilling';
 import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { PrintPreviewModal } from '@/components/PrintPreviewModal';
 import {
-  Package, ChevronDown, ChevronUp, Stethoscope, Pill, X, Check,
+  Package, ChevronDown, ChevronUp, Stethoscope, Pill, X, Check, Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -23,6 +23,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { pharmacyQueueRepository, type PharmacyQueueItem } from '@/repositories/pharmacy-queue.repository';
 import { pharmacyRepository } from '@/repositories/pharmacy.repository';
 import { api } from '@/lib/api';
+import { usePatients } from '@/hooks/usePatients';
 
 const statusTone: Record<string, BadgeTone> = {
   PENDING: 'yellow',
@@ -43,6 +44,7 @@ export function PharmacyQueuePage() {
   const [status, setStatus] = useState<string>('PENDING');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dispensing, setDispensing] = useState<PharmacyQueueItem | null>(null);
+  const [showWalkInModal, setShowWalkInModal] = useState(false);
   const [printInvoiceId, setPrintInvoiceId] = useState<string | null>(null);
   const qc = useQueryClient();
   const organization = useOrganization();
@@ -66,7 +68,10 @@ export function PharmacyQueuePage() {
         title="Pharmacy Queue"
         subtitle="Prescriptions waiting to be dispensed"
         action={
-          <Button variant="secondary" size="sm" onClick={refresh}>Refresh</Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setShowWalkInModal(true)}><Plus size={16} /> Walk-in dispense</Button>
+            <Button variant="secondary" size="sm" onClick={refresh}>Refresh</Button>
+          </div>
         }
       />
 
@@ -136,6 +141,17 @@ export function PharmacyQueuePage() {
         }}
       />
 
+      {/* Walk-in Dispense Modal */}
+      <WalkInDispenseModal
+        open={showWalkInModal}
+        onClose={() => setShowWalkInModal(false)}
+        onDone={async (invoiceId) => {
+          setShowWalkInModal(false);
+          if (invoiceId) setPrintInvoiceId(invoiceId);
+          await refresh();
+        }}
+      />
+
       {printInvoiceId && invoice.data && (
         <PrintPreviewModal
           open={!!printInvoiceId}
@@ -146,6 +162,170 @@ export function PharmacyQueuePage() {
         </PrintPreviewModal>
       )}
     </>
+  );
+}
+
+function WalkInDispenseModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: (invoiceId?: string) => Promise<void> }) {
+  const [isWalkIn, setIsWalkIn] = useState(true);
+  const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
+  const [patientId, setPatientId] = useState('');
+  const [rows, setRows] = useState<DispenseRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [barcode, setBarcode] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  const patients = usePatients({ page: 1, pageSize: 200 });
+
+  function addMedicine(med: { id: string; name: string }) {
+    setRows(prev => {
+      const idx = prev.findIndex(r => r.medicineId === med.id);
+      if (idx !== -1) return prev.map((r, i) => i === idx ? { ...r, qty: r.qty + 1 } : r);
+      return [...prev, { medicineName: med.name, medicineId: med.id, qty: 1, prescribedDose: null, prescribedFrequency: null, prescribedDuration: null }];
+    });
+    setBarcode('');
+    setTimeout(() => barcodeInputRef.current?.focus(), 50);
+  }
+
+  async function lookupAndAdd(rawBarcode: string) {
+    const code = rawBarcode.trim();
+    if (!code) return;
+    setScanning(true); setError(null);
+    try {
+      const med = await pharmacyRepository.getMedicineByBarcode(code);
+      addMedicine({ id: med.id, name: med.name });
+    } catch (err: any) {
+      setError(err?.message || 'Medicine not found');
+      setBarcode('');
+      setTimeout(() => barcodeInputRef.current?.focus(), 50);
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  const dispense = useMutation({
+    mutationFn: async (payload: { items: { medicineId: string; qty: number }[] }) => {
+      let finalPatientId = patientId;
+      if (isWalkIn) {
+        const { id } = await api.post<{id:string}>('/patients', { fullName: walkInName.trim(), mobile: walkInPhone.trim() || null });
+        finalPatientId = id;
+      }
+      
+      const result = await api.post<{ dispenseId: string; totalAmount: number; invoiceId?: string; invoiceNo?: string }>(
+        '/pharmacy/dispense',
+        { patientId: finalPatientId, encounterId: null, notes: 'Walk-in dispense', items: payload.items }
+      );
+      return result;
+    },
+    onSuccess: (result) => onDone(result.invoiceId),
+    onError: (e: any) => setError(e?.message ?? 'Dispense failed'),
+  });
+
+  async function onConfirm() {
+    setError(null);
+    if (isWalkIn) {
+      if (!walkInName.trim()) { setError('Enter walk-in patient name'); return; }
+    } else {
+      if (!patientId) { setError('Select a patient'); return; }
+    }
+    if (rows.length === 0) { setError('Add at least one medicine'); return; }
+    if (rows.some(r => !r.medicineId || r.qty <= 0)) { setError('All rows must have a valid medicine and quantity > 0'); return; }
+
+    await dispense.mutateAsync({ items: rows.map(r => ({ medicineId: r.medicineId, qty: r.qty })) });
+  }
+
+  useEffect(() => {
+    if (open) {
+      setRows([]); setWalkInName(''); setWalkInPhone(''); setPatientId(''); setIsWalkIn(true); setError(null);
+      setTimeout(() => barcodeInputRef.current?.focus(), 100);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Walk-in Dispense" size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={onConfirm} loading={dispense.isPending}><Check size={14} /> Confirm dispense</Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="rounded-md border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex justify-between items-end">
+            <h4 className="text-sm font-medium text-slate-700">Patient *</h4>
+            <button type="button" onClick={() => setIsWalkIn(!isWalkIn)} className="text-[10px] text-brand-600 hover:underline">
+              {isWalkIn ? 'Select existing' : '+ Quick walk-in'}
+            </button>
+          </div>
+          {isWalkIn ? (
+            <div className="flex gap-2">
+              <Input value={walkInName} onChange={(e) => setWalkInName(e.target.value)} placeholder="Name *" className="flex-1" />
+              <Input value={walkInPhone} onChange={(e) => setWalkInPhone(e.target.value)} placeholder="Phone" className="w-1/3" />
+            </div>
+          ) : (
+            <select
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              value={patientId}
+              onChange={(e) => setPatientId(e.target.value)}
+            >
+              <option value="">- select -</option>
+              {patients.data?.rows.map((p) => (
+                <option key={p.id} value={p.server_id ?? ''} disabled={!p.server_id}>
+                  {p.uhid} | {p.full_name} {!p.server_id ? '(syncing)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-600">Add medicine</p>
+          <form onSubmit={(e) => { e.preventDefault(); lookupAndAdd(barcode); }} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <Input ref={barcodeInputRef} label="Barcode" placeholder="Scan or type barcode..." value={barcode} onChange={(e) => setBarcode(e.target.value)} disabled={scanning} />
+            </div>
+            <div className="flex gap-2 sm:mb-0.5">
+              <Button type="submit" loading={scanning} className="flex-1 sm:flex-none">Add</Button>
+              <Button type="button" variant="secondary" onClick={() => setCameraOpen(true)} title="Scan with camera"><Camera size={14} /></Button>
+            </div>
+          </form>
+          <div className="my-3 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">or add manually</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+          <MedicinePicker value="" onChange={(name, meta) => { if (meta?.id) addMedicine({ id: meta.id, name }); }} placeholder="Search medicine from catalog..." />
+        </div>
+
+        <CameraBarcodeScanner open={cameraOpen} onClose={() => { setCameraOpen(false); setTimeout(() => barcodeInputRef.current?.focus(), 50); }} onScan={async (value) => { setCameraOpen(false); await lookupAndAdd(value); }} />
+
+        {error && <Alert tone="error">{error}</Alert>}
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Items to dispense</p>
+            <p className="text-xs text-slate-500">{rows.length} items</p>
+          </div>
+          <div className="space-y-3">
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div className="flex-1 text-sm font-medium text-slate-800">{r.medicineName}</div>
+                <div className="w-24">
+                  <Input type="number" min="1" value={String(r.qty)} onChange={(e) => setRows(rs => rs.map((row, j) => j === i ? { ...row, qty: Math.max(1, Number(e.target.value) || 1) } : row))} />
+                </div>
+                <button type="button" onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-500"><X size={16}/></button>
+              </div>
+            ))}
+            {rows.length === 0 && <p className="text-xs text-slate-400">No medicines added yet.</p>}
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

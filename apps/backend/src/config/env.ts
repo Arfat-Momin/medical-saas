@@ -16,6 +16,7 @@ const schema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   LOG_LEVEL: z.string().default('info'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
 });

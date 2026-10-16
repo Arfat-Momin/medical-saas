@@ -7,6 +7,7 @@ import {
   createMedicineSchema, updateMedicineSchema, listMedicinesQuerySchema,
   createSupplierSchema, updateSupplierSchema,
   receivePurchaseSchema, dispenseSchema, adjustStockSchema,
+  createBatchSchema,
 } from './pharmacy.validators.js';
 import { pharmacyService } from './pharmacy.service.js';
 
@@ -71,6 +72,13 @@ pharmacyRouter.get('/batches',
     const medicineId = req.query.medicineId as string | undefined;
     const onlyInStock = req.query.onlyInStock === 'true';
     res.json(await pharmacyService.listBatches(req.auth!, getAccessToken(req), medicineId, onlyInStock));
+  }),
+);
+pharmacyRouter.post('/batches',
+  requirePermission(PERMISSIONS.PHARMACY_STOCK),
+  asyncHandler(async (req, res) => {
+    const input = createBatchSchema.parse(req.body);
+    res.status(201).json(await pharmacyService.createBatch(req.auth!, getAccessToken(req), input));
   }),
 );
 

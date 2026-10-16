@@ -20,16 +20,24 @@ import { triggerSyncNow } from '@/sync/listeners';
 import { PERMISSIONS } from '@medical/shared';
 import { EditPatientModal } from '@/pages/patients/EditPatientModal';
 import { Avatar } from '@/components/ui/Avatar';
+import { doctorsRepository, type Doctor } from '@/repositories/doctors.repository';
+import { departmentsRepository, type Department } from '@/repositories/departments.repository';
 
 interface FormValues {
   fullName: string; dateOfBirth: string; gender: '' | 'MALE' | 'FEMALE' | 'OTHER';
   mobile: string; address: string; bloodGroup: string;
   allergies: string; medicalHistory: string; emergencyContact: string;
+  registrationAmount?: string; regPaymentMode?: string; regPaymentDate?: string; regReceiptNo?: string;
+  coverageType?: string; coverageProvider?: string; policyNumber?: string; coverageValidity?: string; coverageNotes?: string;
+  firstVisitReason?: string; firstDoctorId?: string; firstDepartmentId?: string; firstVisitAt?: string;
 }
 
 const emptyForm: FormValues = {
   fullName: '', dateOfBirth: '', gender: '', mobile: '', address: '',
   bloodGroup: '', allergies: '', medicalHistory: '', emergencyContact: '',
+  registrationAmount: '', regPaymentMode: '', regPaymentDate: '', regReceiptNo: '',
+  coverageType: 'NONE', coverageProvider: '', policyNumber: '', coverageValidity: '', coverageNotes: '',
+  firstVisitReason: '', firstDoctorId: '', firstDepartmentId: '', firstVisitAt: '',
 };
 
 const BLOOD_GROUPS = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
@@ -46,11 +54,18 @@ export function PatientsPage() {
   const isHospitalAdmin = roles.includes('HOSPITAL_ADMIN');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    doctorsRepository.list().then(setDoctors);
+    departmentsRepository.list().then(setDepartments);
+  }, []);
 
   const [page, setPage] = useState(1);
   const patients = usePatients({ page, pageSize: 10, search: debouncedSearch });
@@ -88,6 +103,19 @@ export function PatientsPage() {
         address: values.address || null, bloodGroup: values.bloodGroup || null,
         allergies: values.allergies || null, medicalHistory: values.medicalHistory || null,
         emergencyContact: values.emergencyContact || null, skipDuplicateCheck,
+        registrationAmount: values.registrationAmount ? Number(values.registrationAmount) : null,
+        regPaymentMode: values.regPaymentMode as any || null,
+        regPaymentDate: values.regPaymentDate || null,
+        regReceiptNo: values.regReceiptNo || null,
+        coverageType: values.coverageType as any || 'NONE',
+        coverageProvider: values.coverageProvider || null,
+        policyNumber: values.policyNumber || null,
+        coverageValidity: values.coverageValidity || null,
+        coverageNotes: values.coverageNotes || null,
+        firstVisitReason: values.firstVisitReason || null,
+        firstDoctorId: values.firstDoctorId || null,
+        firstDepartmentId: values.firstDepartmentId || null,
+        firstVisitAt: values.firstVisitAt || null,
       });
       reset(emptyForm); setOpen(false); setDuplicates(null); setPendingValues(null);
     } catch (e: any) { setError(e?.message ?? 'Failed to register patient'); }
@@ -324,6 +352,53 @@ export function PatientsPage() {
             <Input label="Address" className="sm:col-span-2" {...register('address')} />
             <Input label="Allergies" className="sm:col-span-2" placeholder="Penicillin, peanuts…" {...register('allergies')} />
             <Input label="Medical history" className="sm:col-span-2" placeholder="Diabetes, hypertension…" {...register('medicalHistory')} />
+          </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-6">
+            <h3 className="mb-4 text-sm font-semibold text-slate-800">Registration & Coverage</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input label="Registration amount (₹)" type="number" {...register('registrationAmount')} />
+              <Select label="Payment mode" {...register('regPaymentMode')}>
+                <option value="">—</option>
+                <option value="CASH">Cash</option>
+                <option value="CARD">Card</option>
+                <option value="UPI">UPI</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="NEFT_RTGS">NEFT/RTGS</option>
+              </Select>
+              <Input label="Payment date" type="datetime-local" {...register('regPaymentDate')} />
+              <Input label="Receipt/Transaction No" {...register('regReceiptNo')} />
+
+              <Select label="Coverage type" {...register('coverageType')} className="sm:col-span-2">
+                <option value="NONE">None (Self-pay)</option>
+                <option value="GOVERNMENT_POLICY">Government Policy</option>
+                <option value="MEDICLAIM_INSURANCE">Mediclaim / Insurance</option>
+                <option value="PACKAGE">Package</option>
+                <option value="SWASTHYA_SATHI">Swasthya Sathi</option>
+                <option value="OTHER">Other</option>
+              </Select>
+              
+              <Input label="Provider / Scheme name" {...register('coverageProvider')} />
+              <Input label="Policy number" {...register('policyNumber')} />
+              <Input label="Validity date" type="date" {...register('coverageValidity')} />
+              <Input label="Coverage notes" {...register('coverageNotes')} />
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-6">
+            <h3 className="mb-4 text-sm font-semibold text-slate-800">First Visit Details</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input label="Reason / Diagnosis" className="sm:col-span-2" {...register('firstVisitReason')} />
+              <Select label="Doctor" {...register('firstDoctorId')}>
+                <option value="">—</option>
+                {doctors.map(d => <option key={d.local_id} value={d.server_id || d.local_id}>{d.full_name}</option>)}
+              </Select>
+              <Select label="Department" {...register('firstDepartmentId')}>
+                <option value="">—</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Select>
+              <Input label="Visit date & time" type="datetime-local" {...register('firstVisitAt')} />
+            </div>
           </div>
         </form>
       </Modal>

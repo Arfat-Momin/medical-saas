@@ -29,6 +29,7 @@ import { AdmissionsPage } from '@/pages/ipd/AdmissionsPage';
 import { AdmissionDetailPage } from '@/pages/ipd/AdmissionDetailPage';
 import { IPDBillBuilderPage } from '@/pages/ipd/IPDBillBuilderPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
+import { IPDPricingPage } from '@/pages/ipd/IPDPricingPage';
 import { PatientsPage } from '@/pages/PatientsPage';
 import { PatientDetailPage } from '@/pages/PatientDetailPage';
 import { AppointmentsPage } from '@/pages/AppointmentsPage';
@@ -44,6 +45,9 @@ import { PharmacyQueuePage } from '@/pages/pharmacy/PharmacyQueuePage';
 import { PharmacyInvoicesPage } from '@/pages/pharmacy/PharmacyInvoicesPage';
 import { LabInvoicesPage } from '@/pages/laboratory/LabInvoicesPage';
 import { SubscriptionPage } from '@/pages/settings/SubscriptionPage';
+import { AccountsBookPage } from '@/pages/finance/AccountsBookPage';
+import { CashClosingPage } from '@/pages/finance/CashClosingPage';
+import { PermissionGuard } from '@/components/PermissionGuard';
 
 export default function App() {
   return (
@@ -90,9 +94,20 @@ export default function App() {
             <Route path="/ipd/admissions" element={<AdmissionsPage />} />
             <Route path="/ipd/admissions/:admissionId" element={<AdmissionDetailPage />} />
             <Route path="/ipd/admissions/:admissionId/bill" element={<IPDBillBuilderPage />} />
+            <Route path="/ipd/pricing" element={<IPDPricingPage />} />
             <Route path="/settings/sessions" element={<SessionsPage />} />
             <Route path="/settings/pricing" element={<AdminPricingPage />} />
             <Route path="/settings/subscription" element={<SubscriptionPage />} />
+            <Route path="/finance/accounts" element={
+              <PermissionGuard permission="finance:read">
+                <AccountsBookPage />
+              </PermissionGuard>
+            } />
+            <Route path="/finance/cash-closing" element={
+              <PermissionGuard permission="finance:read">
+                <CashClosingPage />
+              </PermissionGuard>
+            } />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

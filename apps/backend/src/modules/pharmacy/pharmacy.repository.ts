@@ -1,4 +1,4 @@
-﻿import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const pharmacyRepository = {
   // ---------------- MEDICINES ----------------
@@ -80,6 +80,52 @@ export const pharmacyRepository = {
     const { data, error } = await q;
     if (error) throw error;
     return data ?? [];
+  },
+
+  async createBatch(client: SupabaseClient, p: {
+    tenantId: string;
+    userId: string;
+    medicineId: string;
+    batchNo: string;
+    expiryDate: string;
+    initialQty: number;
+    purchasePrice?: number;
+    mrp?: number;
+    sellingPrice?: number;
+  }) {
+    const { data: batch, error: batchErr } = await client
+      .from('medicine_batches')
+      .insert({
+        tenant_id: p.tenantId,
+        medicine_id: p.medicineId,
+        batch_no: p.batchNo,
+        expiry_date: p.expiryDate,
+        purchase_price: p.purchasePrice ?? 0,
+        mrp: p.mrp ?? null,
+        selling_price: p.sellingPrice ?? null,
+        current_qty: 0,
+      })
+      .select('*')
+      .single();
+    if (batchErr) throw batchErr;
+
+    if (p.initialQty > 0) {
+      const { error: txErr } = await client
+        .from('stock_transactions')
+        .insert({
+          tenant_id: p.tenantId,
+          batch_id: batch.id,
+          medicine_id: p.medicineId,
+          txn_type: 'ADJUSTMENT',
+          qty_delta: p.initialQty,
+          reference_type: 'MANUAL',
+          notes: 'Initial stock entry',
+          created_by: p.userId,
+        });
+      if (txErr) throw txErr;
+      batch.current_qty = p.initialQty;
+    }
+    return batch;
   },
 
   // ---------------- PURCHASES ----------------

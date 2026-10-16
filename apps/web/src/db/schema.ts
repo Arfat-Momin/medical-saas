@@ -1,5 +1,5 @@
 export const DB_NAME = 'medsaas';
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
 
 export interface LocalPatient {
   local_id: string;
@@ -16,6 +16,19 @@ export interface LocalPatient {
   allergies: string | null;
   medical_history: string | null;
   emergency_contact: string | null;
+  registration_amount: number | null;
+  reg_payment_mode: 'CASH' | 'CARD' | 'UPI' | 'CHEQUE' | 'NEFT_RTGS' | null;
+  reg_payment_date: string | null;
+  reg_receipt_no: string | null;
+  coverage_type: 'NONE' | 'GOVERNMENT_POLICY' | 'MEDICLAIM_INSURANCE' | 'PACKAGE' | 'SWASTHYA_SATHI' | 'OTHER' | null;
+  coverage_provider: string | null;
+  policy_number: string | null;
+  coverage_validity: string | null;
+  coverage_notes: string | null;
+  first_visit_reason: string | null;
+  first_doctor_id: string | null;
+  first_department_id: string | null;
+  first_visit_at: string | null;
   sync_status: 'pending' | 'synced' | 'failed' | 'conflict' | 'blocked';
   sync_error: string | null;
   server_updated_at: string | null;
@@ -139,6 +152,7 @@ export interface QueueItem {
   last_error: string | null;
   status: 'pending' | 'inflight' | 'failed' | 'conflict' | 'blocked' | 'done';
   next_retry_at: string | null;
+  server_ack: string | null;   // ISO timestamp when server confirmed the push
   created_at: string;
 }
 

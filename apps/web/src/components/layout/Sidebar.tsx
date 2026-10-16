@@ -1,13 +1,15 @@
 import { NavLink } from 'react-router-dom';
 import { Activity } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
-import { getNavFor } from './nav-items';
+import { getNavFor, filterNavByPermissions } from './nav-items';
 import { cn } from '@/lib/cn';
 
 export function Sidebar() {
   const isPlatformAdmin = useAuthStore((s) => s.user?.isPlatformAdmin ?? false);
   const tenantId = useAuthStore((s) => s.tenantId);
-  const groups = getNavFor(isPlatformAdmin);
+  const permissions = useAuthStore((s) => s.permissions);
+  const allGroups = getNavFor(isPlatformAdmin);
+  const groups = isPlatformAdmin ? allGroups : filterNavByPermissions(allGroups, permissions);
 
   return (
     <aside className="ios-enter hidden w-[248px] shrink-0 flex-col gap-3 p-3 md:flex">

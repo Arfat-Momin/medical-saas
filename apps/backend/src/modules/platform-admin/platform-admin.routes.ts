@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import {
   listTenantsQuerySchema, updateTenantSchema, extendSubscriptionSchema,
-  createPlanSchema, updatePlanSchema,
+  createPlanSchema, updatePlanSchema, createCustomTenantSchema,
 } from './platform-admin.validators.js';
 import { platformAdminService } from './platform-admin.service.js';
 
@@ -54,6 +54,13 @@ platformAdminRouter.patch('/plans/:id',
   asyncHandler(async (req, res) => {
     const patch = updatePlanSchema.parse(req.body);
     res.json(await platformAdminService.updatePlan(req.auth!, req.params.id!, patch));
+  }),
+);
+
+platformAdminRouter.post('/custom-tenant',
+  asyncHandler(async (req, res) => {
+    const input = createCustomTenantSchema.parse(req.body);
+    res.status(201).json(await platformAdminService.createCustomTenant(req.auth!, input));
   }),
 );
 

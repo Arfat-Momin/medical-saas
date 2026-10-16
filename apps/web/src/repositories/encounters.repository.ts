@@ -9,6 +9,7 @@ export interface Encounter {
   patient_id: string;                 // patient_local_id
   patient_name?: string;
   patient_uhid?: string;
+  patient_server_id?: string | null;
   doctor_id: string | null;
   appointment_id: string | null;
   appointment_server_id: string | null;
@@ -55,6 +56,7 @@ async function hydrate(enc: LocalEncounter): Promise<Encounter> {
     patient_id: enc.patient_local_id,
     patient_name: patient?.full_name,
     patient_uhid: patient?.uhid ?? undefined,
+    patient_server_id: enc.patient_server_id,
     doctor_id: enc.doctor_id,
     appointment_id: enc.appointment_local_id,
     appointment_server_id: enc.appointment_server_id,

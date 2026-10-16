@@ -386,6 +386,9 @@ export const subscriptionsService = {
     if (plan.is_free || !plan.is_renewable) {
       throw BadRequest('Free or non-renewable plans cannot be purchased as a renewal');
     }
+    if (plan.is_custom && plan.custom_tenant_id !== auth.tenantId) {
+      throw NotFound('Plan not found or inactive');
+    }
 
     const pending = await repo.findExistingPendingRenewal(supabaseAdmin, auth.tenantId);
     if (pending) {

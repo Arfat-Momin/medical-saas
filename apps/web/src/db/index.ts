@@ -73,9 +73,9 @@ class MedSaasDB extends Dexie {
 
     // v6 — tenant-scoped compound primary keys on all master-data caches.
     // This prevents cross-tenant bleed when a user belongs to multiple tenants.
-    // The read-only cache tables are cleared here; they repopulate on the
+    // the read-only cache tables are cleared here; they repopulate on the
     // next pull (which happens automatically on app boot).
-    this.version(SCHEMA_VERSION).stores({
+    this.version(6).stores({
       patients:        'local_id, server_id, full_name, mobile, sync_status, updated_at, deleted',
       doctors:         'local_id, server_id, full_name, is_active',
       appointments:    'local_id, server_id, patient_local_id, appointment_local_id, appointment_date, status, sync_status, updated_at, deleted',
@@ -94,10 +94,41 @@ class MedSaasDB extends Dexie {
       await tx.table('branches').clear();
       await tx.table('encounterHeaders').clear();
     });
+
+    // v7 — add server_ack column to queue (tracks when server confirmed push).
+    // All other table schemas unchanged.
+    this.version(SCHEMA_VERSION).stores({
+      patients:        'local_id, server_id, full_name, mobile, sync_status, updated_at, deleted',
+      doctors:         'local_id, server_id, full_name, is_active',
+      appointments:    'local_id, server_id, patient_local_id, appointment_local_id, appointment_date, status, sync_status, updated_at, deleted',
+      encounters:      'local_id, server_id, patient_local_id, appointment_local_id, encounter_date, status, sync_status, updated_at, deleted',
+      queue:           'id, status, entity, local_id, created_at, next_retry_at',
+      meta:            'key',
+      medicines:       '[tenant_id+id], tenant_id, name, code, barcode, generic_name, is_active, updated_at',
+      labTests:        '[tenant_id+id], tenant_id, name, code, category, is_active, updated_at',
+      organization:    '[tenant_id+id], tenant_id',
+      branches:        '[tenant_id+id], tenant_id, branch_code, is_active',
+      encounterHeaders:'[tenant_id+id], tenant_id, patient_id, encounter_date, updated_at',
+    }).upgrade(async (tx) => {
+      // Back-fill server_ack = null on all existing queue rows
+      await tx.table('queue').toCollection().modify((row: any) => {
+        if (row.server_ack === undefined) row.server_ack = null;
+      });
+    });
   }
 }
 
 export const db = new MedSaasDB();
+
+db.open().catch(async (err) => {
+  if (err.name === 'UpgradeError' || err.inner?.name === 'UpgradeError') {
+    console.warn('Dexie UpgradeError detected - wiping local database to reset schema...');
+    await db.delete();
+    await db.open();
+  } else {
+    throw err;
+  }
+});
 
 export const uuid = (): string =>
   (crypto as any).randomUUID

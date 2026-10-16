@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ipdRepository as repo } from '@/repositories/ipd.repository';
 
-const LOCS = ['ipd', 'locations'];
-const BEDS = ['ipd', 'beds'];
-const ADMS = ['ipd', 'admissions'];
+const LOCS    = ['ipd', 'locations'];
+const BEDS    = ['ipd', 'beds'];
+const ADMS    = ['ipd', 'admissions'];
+const PRICING = ['ipd', 'pricing'];
 
 // ---- Locations ----
 export function useLocations(params: { branchId?: string; parentId?: string; type?: string } = {}) {
@@ -23,7 +24,6 @@ export function useUpdateLocation() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: LOCS }); qc.invalidateQueries({ queryKey: BEDS }); },
   });
 }
-
 export function useDeleteLocation() {
   const qc = useQueryClient();
   return useMutation({
@@ -94,5 +94,39 @@ export function useMarkMar(admissionId: string) {
     mutationFn: ({ marId, status, notes }: { marId: string; status: string; notes?: string | null }) =>
       repo.markMar(marId, { status, notes }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...ADMS, admissionId] }),
+  });
+}
+
+export function useSignConsent(admissionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (signature: string) => repo.signConsent(admissionId, signature),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ADMS }); qc.invalidateQueries({ queryKey: [...ADMS, admissionId] }); },
+  });
+}
+
+// ---- IPD Pricing ----
+export function useIpdPricing(params: { branchId?: string; category?: string; isActive?: boolean } = {}) {
+  return useQuery({ queryKey: [...PRICING, params], queryFn: () => repo.listIpdPricing(params) });
+}
+export function useCreateIpdPricing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: repo.createIpdPricing,
+    onSuccess: () => qc.invalidateQueries({ queryKey: PRICING }),
+  });
+}
+export function useUpdateIpdPricing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: any }) => repo.updateIpdPricing(id, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PRICING }),
+  });
+}
+export function useDeleteIpdPricing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => repo.deleteIpdPricing(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: PRICING }),
   });
 }

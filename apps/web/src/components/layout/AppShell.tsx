@@ -7,6 +7,7 @@ import { BottomTabBar } from './BottomTabBar';
 import { useMeSync } from '@/hooks/useAuth';
 import { FullPageSpinner } from '@/components/ui/Spinner';
 import { SubscriptionGate } from '@/components/subscription/SubscriptionGate';
+import { AIAssistantWidget } from '@/components/ai/AIAssistantWidget';
 
 export function AppShell() {
   const { isLoading, isError } = useMeSync();
@@ -91,6 +92,8 @@ export function AppShell() {
 
         <BottomTabBar />
       </div>
+
+      <AIAssistantWidget />
     </>
   );
 }

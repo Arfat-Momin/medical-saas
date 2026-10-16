@@ -7,6 +7,8 @@ import {
   createLocationSchema, updateLocationSchema, listLocationsQuerySchema,
   admitPatientSchema, transferBedSchema, dischargeSchema, listAdmissionsQuerySchema,
   createNursingNoteSchema, createDoctorRoundSchema, createMarSchema, markMarSchema,
+  signConsentSchema,
+  createIpdPricingSchema, updateIpdPricingSchema, listIpdPricingQuerySchema,
 } from './ipd.validators.js';
 import { ipdService } from './ipd.service.js';
 
@@ -87,6 +89,15 @@ ipdRouter.post('/admissions/:id/discharge',
   }),
 );
 
+// ---- Consent ----
+ipdRouter.post('/admissions/:id/consent',
+  requirePermission(PERMISSIONS.IPD_MANAGE),
+  asyncHandler(async (req, res) => {
+    const input = signConsentSchema.parse(req.body);
+    res.json(await ipdService.signConsent(req.auth!, getAccessToken(req), req.params.id!, input.signature));
+  }),
+);
+
 // ---- Nursing notes ----
 ipdRouter.post('/admissions/:id/nursing-notes',
   requirePermission(PERMISSIONS.IPD_MANAGE),
@@ -118,5 +129,34 @@ ipdRouter.patch('/mar/:marId',
   asyncHandler(async (req, res) => {
     const input = markMarSchema.parse(req.body);
     res.json(await ipdService.markMar(req.auth!, getAccessToken(req), req.params.marId!, input));
+  }),
+);
+
+// ---- IPD Pricing ----
+ipdRouter.get('/pricing',
+  requirePermission(PERMISSIONS.IPD_READ),
+  asyncHandler(async (req, res) => {
+    const q = listIpdPricingQuerySchema.parse(req.query);
+    res.json(await ipdService.listIpdPricing(req.auth!, getAccessToken(req), q));
+  }),
+);
+ipdRouter.post('/pricing',
+  requirePermission(PERMISSIONS.IPD_MANAGE),
+  asyncHandler(async (req, res) => {
+    const input = createIpdPricingSchema.parse(req.body);
+    res.status(201).json(await ipdService.createIpdPricing(req.auth!, getAccessToken(req), input));
+  }),
+);
+ipdRouter.patch('/pricing/:id',
+  requirePermission(PERMISSIONS.IPD_MANAGE),
+  asyncHandler(async (req, res) => {
+    const input = updateIpdPricingSchema.parse(req.body);
+    res.json(await ipdService.updateIpdPricing(req.auth!, getAccessToken(req), req.params.id!, input));
+  }),
+);
+ipdRouter.delete('/pricing/:id',
+  requirePermission(PERMISSIONS.IPD_MANAGE),
+  asyncHandler(async (req, res) => {
+    res.json(await ipdService.deleteIpdPricing(req.auth!, getAccessToken(req), req.params.id!));
   }),
 );

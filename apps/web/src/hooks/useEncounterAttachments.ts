@@ -11,6 +11,10 @@ export interface EncounterAttachment {
   width: number | null;
   height: number | null;
   uploaded_by: string;
+  patient_id: string | null;
+  doctor_id: string | null;
+  capture_mode: 'CAMERA' | 'UPLOAD' | null;
+  document_type: 'PRESCRIPTION' | 'REPORT' | 'XRAY' | 'ECG' | 'CONSENT' | 'OTHER' | null;
   created_at: string;
   url?: string;
 }
@@ -60,6 +64,10 @@ export function useUploadEncounterAttachment(encounterId: string) {
       blob: Blob;
       width: number;
       height: number;
+      patientId?: string | null;
+      doctorId?: string | null;
+      captureMode?: 'CAMERA' | 'UPLOAD';
+      documentType?: 'PRESCRIPTION' | 'REPORT' | 'XRAY' | 'ECG' | 'CONSENT' | 'OTHER';
     }) => {
       const sb = getSupabase();
 
@@ -83,6 +91,10 @@ export function useUploadEncounterAttachment(encounterId: string) {
         width:        input.width,
         height:       input.height,
         uploaded_by:  input.userId,
+        patient_id:   input.patientId ?? null,
+        doctor_id:    input.doctorId ?? null,
+        capture_mode: input.captureMode ?? 'UPLOAD',
+        document_type: input.documentType ?? null,
       });
 
       if (insErr) {

@@ -37,6 +37,8 @@ export function AdmissionsPage() {
 
   const [patientId, setPatientId] = useState('');
   const [doctorId, setDoctorId] = useState('');
+  const [wardId, setWardId] = useState('');
+  const [roomId, setRoomId] = useState('');
   const [bedId, setBedId] = useState('');
   const [reason, setReason] = useState('');
   const [diagnosis, setDiagnosis] = useState('');
@@ -45,8 +47,26 @@ export function AdmissionsPage() {
   const canManage = can(PERMISSIONS.IPD_MANAGE);
   const availableBeds = (beds.data ?? []).filter((b) => b.bed_status === 'AVAILABLE');
 
+  // Compute unique wards from available beds
+  const wards = Array.from(new Set(availableBeds.map(b => b.ward_id).filter(Boolean))).map(id => {
+    return availableBeds.find(b => b.ward_id === id);
+  });
+
+  // Compute unique rooms for selected ward
+  const rooms = wardId 
+    ? Array.from(new Set(availableBeds.filter(b => b.ward_id === wardId).map(b => b.room_id).filter(Boolean))).map(id => {
+        return availableBeds.find(b => b.room_id === id);
+      })
+    : [];
+
+  // Compute available beds for selected ward/room
+  const finalBeds = availableBeds.filter(b => 
+    (!wardId || b.ward_id === wardId) && 
+    (!roomId || b.room_id === roomId)
+  );
+
   function reset() {
-    setPatientId(''); setDoctorId(''); setBedId('');
+    setPatientId(''); setDoctorId(''); setWardId(''); setRoomId(''); setBedId('');
     setReason(''); setDiagnosis(''); setExpectedDischarge('');
     setError(null);
   }
@@ -106,6 +126,7 @@ export function AdmissionsPage() {
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3">Patient</th>
+                  <th className="px-5 py-3">IP Number</th>
                   <th className="px-5 py-3">Doctor</th>
                   <th className="px-5 py-3">Admitted</th>
                   <th className="px-5 py-3">Expected discharge</th>
@@ -120,6 +141,7 @@ export function AdmissionsPage() {
                       <div className="font-medium text-slate-900">{a.patients?.full_name}</div>
                       <div className="font-mono text-xs text-brand-700">{a.patients?.uhid}</div>
                     </td>
+                    <td className="px-5 py-3 font-mono text-xs text-slate-600">{a.ip_number ?? '-'}</td>
                     <td className="px-5 py-3 text-slate-600">{a.doctors?.full_name ?? '-'}</td>
                     <td className="px-5 py-3 text-slate-600 text-xs">
                       {new Date(a.admitted_at).toLocaleString()}
@@ -173,16 +195,38 @@ export function AdmissionsPage() {
             ))}
           </Select>
 
-          <Select label="Bed *" value={bedId} onChange={(e) => setBedId(e.target.value)}>
-            <option value="">
-              {beds.isLoading ? 'Loading...' : availableBeds.length === 0 ? 'No available beds' : `- ${availableBeds.length} available -`}
-            </option>
-            {availableBeds.map((b) => (
-              <option key={b.bed_id} value={b.bed_id}>
-                {b.ward_name ?? '-'} / {b.room_name ?? '-'} / {b.bed_name}
-              </option>
-            ))}
-          </Select>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Select label="Ward" value={wardId} onChange={(e) => { setWardId(e.target.value); setRoomId(''); setBedId(''); }}>
+                <option value="">- any -</option>
+                {wards.map((w) => (
+                  <option key={w?.ward_id} value={w?.ward_id!}>{w?.ward_name}</option>
+                ))}
+              </Select>
+            </div>
+            {rooms.length > 0 && (
+              <div className="flex-1">
+                <Select label="Room" value={roomId} onChange={(e) => { setRoomId(e.target.value); setBedId(''); }}>
+                  <option value="">- any -</option>
+                  {rooms.map((r) => (
+                    <option key={r?.room_id} value={r?.room_id!}>{r?.room_name}</option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            <div className="flex-1">
+              <Select label="Bed *" value={bedId} onChange={(e) => setBedId(e.target.value)}>
+                <option value="">
+                  {beds.isLoading ? 'Loading...' : finalBeds.length === 0 ? 'No beds' : `- select (${finalBeds.length}) -`}
+                </option>
+                {finalBeds.map((b) => (
+                  <option key={b.bed_id} value={b.bed_id}>
+                    {b.bed_name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
 
           <Input label="Reason for admission" value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="High fever, observation" />

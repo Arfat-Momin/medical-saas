@@ -29,11 +29,22 @@ interface FormState {
   allergies: string;
   medicalHistory: string;
   emergencyContact: string;
+  registrationAmount: string;
+  regPaymentMode: string;
+  regPaymentDate: string;
+  regReceiptNo: string;
+  coverageType: string;
+  coverageProvider: string;
+  policyNumber: string;
+  coverageValidity: string;
+  coverageNotes: string;
 }
 
 const empty: FormState = {
   fullName: '', dateOfBirth: '', gender: '', mobile: '', address: '',
   bloodGroup: '', allergies: '', medicalHistory: '', emergencyContact: '',
+  registrationAmount: '', regPaymentMode: '', regPaymentDate: '', regReceiptNo: '',
+  coverageType: 'NONE', coverageProvider: '', policyNumber: '', coverageValidity: '', coverageNotes: '',
 };
 
 export function EditPatientModal({ open, patient, onClose, onSaved }: Props) {
@@ -60,6 +71,15 @@ export function EditPatientModal({ open, patient, onClose, onSaved }: Props) {
       allergies: patient.allergies ?? '',
       medicalHistory: patient.medical_history ?? '',
       emergencyContact: patient.emergency_contact ?? '',
+      registrationAmount: patient.registration_amount ? String(patient.registration_amount) : '',
+      regPaymentMode: patient.reg_payment_mode ?? '',
+      regPaymentDate: patient.reg_payment_date ? new Date(patient.reg_payment_date).toISOString().slice(0, 16) : '',
+      regReceiptNo: patient.reg_receipt_no ?? '',
+      coverageType: patient.coverage_type ?? 'NONE',
+      coverageProvider: patient.coverage_provider ?? '',
+      policyNumber: patient.policy_number ?? '',
+      coverageValidity: patient.coverage_validity ?? '',
+      coverageNotes: patient.coverage_notes ?? '',
     });
     setError(null);
     setSaved(false);
@@ -74,7 +94,16 @@ export function EditPatientModal({ open, patient, onClose, onSaved }: Props) {
     form.bloodGroup !== (patient.blood_group ?? '') ||
     form.allergies !== (patient.allergies ?? '') ||
     form.medicalHistory !== (patient.medical_history ?? '') ||
-    form.emergencyContact !== (patient.emergency_contact ?? '')
+    form.emergencyContact !== (patient.emergency_contact ?? '') ||
+    form.registrationAmount !== (patient.registration_amount ? String(patient.registration_amount) : '') ||
+    form.regPaymentMode !== (patient.reg_payment_mode ?? '') ||
+    form.regPaymentDate !== (patient.reg_payment_date ? new Date(patient.reg_payment_date).toISOString().slice(0, 16) : '') ||
+    form.regReceiptNo !== (patient.reg_receipt_no ?? '') ||
+    form.coverageType !== (patient.coverage_type ?? 'NONE') ||
+    form.coverageProvider !== (patient.coverage_provider ?? '') ||
+    form.policyNumber !== (patient.policy_number ?? '') ||
+    form.coverageValidity !== (patient.coverage_validity ?? '') ||
+    form.coverageNotes !== (patient.coverage_notes ?? '')
   );
 
   const onChange = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -104,6 +133,15 @@ export function EditPatientModal({ open, patient, onClose, onSaved }: Props) {
           allergies: form.allergies || null,
           medicalHistory: form.medicalHistory || null,
           emergencyContact: form.emergencyContact || null,
+          registrationAmount: form.registrationAmount ? Number(form.registrationAmount) : null,
+          regPaymentMode: form.regPaymentMode || null,
+          regPaymentDate: form.regPaymentDate ? new Date(form.regPaymentDate).toISOString() : null,
+          regReceiptNo: form.regReceiptNo || null,
+          coverageType: form.coverageType || 'NONE',
+          coverageProvider: form.coverageProvider || null,
+          policyNumber: form.policyNumber || null,
+          coverageValidity: form.coverageValidity || null,
+          coverageNotes: form.coverageNotes || null,
         },
       });
       setSaved(true);
@@ -248,6 +286,37 @@ export function EditPatientModal({ open, patient, onClose, onSaved }: Props) {
               onChange={onChange('medicalHistory')}
               placeholder="Diabetes, hypertension, ..."
             />
+          </div>
+
+          <div className="mt-6 border-t border-slate-100 pt-6">
+            <h3 className="mb-4 text-sm font-semibold text-slate-800">Registration & Coverage</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input label="Registration amount (₹)" type="number" value={form.registrationAmount} onChange={onChange('registrationAmount')} />
+              <Select label="Payment mode" value={form.regPaymentMode} onChange={onChange('regPaymentMode')}>
+                <option value="">—</option>
+                <option value="CASH">Cash</option>
+                <option value="CARD">Card</option>
+                <option value="UPI">UPI</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="NEFT_RTGS">NEFT/RTGS</option>
+              </Select>
+              <Input label="Payment date" type="datetime-local" value={form.regPaymentDate} onChange={onChange('regPaymentDate')} />
+              <Input label="Receipt/Transaction No" value={form.regReceiptNo} onChange={onChange('regReceiptNo')} />
+
+              <Select label="Coverage type" value={form.coverageType} onChange={onChange('coverageType')} className="sm:col-span-2">
+                <option value="NONE">None (Self-pay)</option>
+                <option value="GOVERNMENT_POLICY">Government Policy</option>
+                <option value="MEDICLAIM_INSURANCE">Mediclaim / Insurance</option>
+                <option value="PACKAGE">Package</option>
+                <option value="SWASTHYA_SATHI">Swasthya Sathi</option>
+                <option value="OTHER">Other</option>
+              </Select>
+              
+              <Input label="Provider / Scheme name" value={form.coverageProvider} onChange={onChange('coverageProvider')} />
+              <Input label="Policy number" value={form.policyNumber} onChange={onChange('policyNumber')} />
+              <Input label="Validity date" type="date" value={form.coverageValidity} onChange={onChange('coverageValidity')} />
+              <Input label="Coverage notes" value={form.coverageNotes} onChange={onChange('coverageNotes')} />
+            </div>
           </div>
         </form>
       </Modal>

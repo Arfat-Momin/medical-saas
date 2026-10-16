@@ -76,6 +76,16 @@ export const pharmacyRepository = {
     return api.get<Batch[]>(`/pharmacy/batches?${qs.toString()}`);
   },
 
+  createBatch: (input: {
+    medicineId: string;
+    batchNo: string;
+    expiryDate: string;
+    initialQty?: number;
+    purchasePrice?: number;
+    mrp?: number | null;
+    sellingPrice?: number | null;
+  }) => api.post<Batch>('/pharmacy/batches', input),
+
   listPurchases: (page = 1, pageSize = 20) =>
     api.get<{ rows: Purchase[]; total: number }>(`/pharmacy/purchases?page=${page}&pageSize=${pageSize}`),
   receivePurchase: (input: {

@@ -77,6 +77,19 @@ export const patientsService = {
       medical_history: input.medicalHistory ?? null,
       emergency_contact: input.emergencyContact ?? null,
       created_by: auth.userId,
+      registration_amount: input.registrationAmount ?? null,
+      reg_payment_mode: input.regPaymentMode ?? null,
+      reg_payment_date: input.regPaymentDate ?? null,
+      reg_receipt_no: input.regReceiptNo ?? null,
+      coverage_type: input.coverageType ?? 'NONE',
+      coverage_provider: input.coverageProvider ?? null,
+      policy_number: input.policyNumber ?? null,
+      coverage_validity: input.coverageValidity ?? null,
+      coverage_notes: input.coverageNotes ?? null,
+      first_visit_reason: input.firstVisitReason ?? null,
+      first_doctor_id: input.firstDoctorId ?? null,
+      first_department_id: input.firstDepartmentId ?? null,
+      first_visit_at: input.firstVisitAt ?? null,
     });
 
     await audit({
@@ -131,6 +144,19 @@ export const patientsService = {
     if (patch.allergies !== undefined)        dbPatch.allergies = patch.allergies;
     if (patch.medicalHistory !== undefined)   dbPatch.medical_history = patch.medicalHistory;
     if (patch.emergencyContact !== undefined) dbPatch.emergency_contact = patch.emergencyContact;
+    if (patch.registrationAmount !== undefined) dbPatch.registration_amount = patch.registrationAmount;
+    if (patch.regPaymentMode !== undefined)   dbPatch.reg_payment_mode = patch.regPaymentMode;
+    if (patch.regPaymentDate !== undefined)   dbPatch.reg_payment_date = patch.regPaymentDate;
+    if (patch.regReceiptNo !== undefined)     dbPatch.reg_receipt_no = patch.regReceiptNo;
+    if (patch.coverageType !== undefined)     dbPatch.coverage_type = patch.coverageType;
+    if (patch.coverageProvider !== undefined) dbPatch.coverage_provider = patch.coverageProvider;
+    if (patch.policyNumber !== undefined)     dbPatch.policy_number = patch.policyNumber;
+    if (patch.coverageValidity !== undefined) dbPatch.coverage_validity = patch.coverageValidity;
+    if (patch.coverageNotes !== undefined)    dbPatch.coverage_notes = patch.coverageNotes;
+    if (patch.firstVisitReason !== undefined) dbPatch.first_visit_reason = patch.firstVisitReason;
+    if (patch.firstDoctorId !== undefined)    dbPatch.first_doctor_id = patch.firstDoctorId;
+    if (patch.firstDepartmentId !== undefined) dbPatch.first_department_id = patch.firstDepartmentId;
+    if (patch.firstVisitAt !== undefined)     dbPatch.first_visit_at = patch.firstVisitAt;
 
     if (Object.keys(dbPatch).length === 0) return before;
 

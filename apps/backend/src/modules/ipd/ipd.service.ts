@@ -8,6 +8,7 @@ import type {
   CreateLocationInput, UpdateLocationInput, ListLocationsQuery,
   AdmitPatientInput, TransferBedInput, DischargeInput, ListAdmissionsQuery,
   CreateNursingNoteInput, CreateDoctorRoundInput, CreateMarInput, MarkMarInput,
+  CreateIpdPricingInput, UpdateIpdPricingInput, ListIpdPricingQuery,
 } from './ipd.validators.js';
 
 export const ipdService = {
@@ -20,13 +21,16 @@ export const ipdService = {
     if (!auth.tenantId) throw NotFound('No tenant context');
     const client = supabaseForUser(token);
     const loc = await repo.createLocation(client, {
-      tenant_id: auth.tenantId,
-      branch_id: input.branchId,
-      parent_id: input.parentId ?? null,
-      type: input.type,
-      name: input.name,
-      code: input.code ?? null,
-      capacity: input.capacity ?? null,
+      tenant_id:     auth.tenantId,
+      branch_id:     input.branchId,
+      parent_id:     input.parentId ?? null,
+      type:          input.type,
+      name:          input.name,
+      code:          input.code ?? null,
+      capacity:      input.capacity ?? null,
+      ward_category: input.wardCategory ?? null,
+      daily_rate:    input.dailyRate ?? null,
+      pricing_notes: input.pricingNotes ?? null,
     });
     await audit({ actorUserId: auth.userId, action: 'LOCATION_CREATED', entity: 'locations', entityId: loc.id, after: loc });
     return loc;
@@ -37,10 +41,13 @@ export const ipdService = {
     const before = await repo.findLocation(client, auth.tenantId, id);
     if (!before) throw NotFound('Location not found');
     const dbPatch: Record<string, unknown> = {};
-    if (patch.name !== undefined)     dbPatch.name = patch.name;
-    if (patch.code !== undefined)     dbPatch.code = patch.code;
-    if (patch.capacity !== undefined) dbPatch.capacity = patch.capacity;
-    if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
+    if (patch.name !== undefined)          dbPatch.name          = patch.name;
+    if (patch.code !== undefined)          dbPatch.code          = patch.code;
+    if (patch.capacity !== undefined)      dbPatch.capacity      = patch.capacity;
+    if (patch.isActive !== undefined)      dbPatch.is_active     = patch.isActive;
+    if (patch.wardCategory !== undefined)  dbPatch.ward_category = patch.wardCategory;
+    if (patch.dailyRate !== undefined)     dbPatch.daily_rate    = patch.dailyRate;
+    if (patch.pricingNotes !== undefined)  dbPatch.pricing_notes = patch.pricingNotes;
     const after = await repo.updateLocation(client, auth.tenantId, id, dbPatch);
     await audit({ actorUserId: auth.userId, action: 'LOCATION_UPDATED', entity: 'locations', entityId: id, before, after });
     return after;
@@ -227,6 +234,63 @@ export const ipdService = {
 
     const after = await repo.markMar(client, auth.tenantId, marId, patch);
     await audit({ actorUserId: auth.userId, action: 'MAR_UPDATED', entity: 'mar_records', entityId: marId, before: { status: before.status }, after: { status: after.status } });
+    return after;
+  },
+
+  async signConsent(auth: AuthContext, token: string, admissionId: string, signature: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const adm = await repo.findAdmissionFull(client, auth.tenantId, admissionId);
+    if (!adm) throw NotFound('Admission not found');
+
+    const updated = await repo.signConsent(client, auth.tenantId, admissionId, signature);
+    await audit({ actorUserId: auth.userId, action: 'ADMISSION_CONSENT_SIGNED', entity: 'admissions', entityId: admissionId });
+    return updated;
+  },
+
+  // ---- IPD Pricing ----
+  async listIpdPricing(auth: AuthContext, token: string, q: ListIpdPricingQuery) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    return repo.listIpdPricing(supabaseForUser(token), auth.tenantId, q);
+  },
+  async createIpdPricing(auth: AuthContext, token: string, input: CreateIpdPricingInput) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const item = await repo.createIpdPricing(client, {
+      tenant_id:  auth.tenantId,
+      branch_id:  input.branchId ?? null,
+      category:   input.category,
+      name:       input.name,
+      code:       input.code ?? null,
+      unit_price: input.unitPrice,
+      unit:       input.unit ?? 'per day',
+    });
+    await audit({ actorUserId: auth.userId, action: 'IPD_PRICING_CREATED', entity: 'ipd_pricing', entityId: item.id, after: item });
+    return item;
+  },
+  async updateIpdPricing(auth: AuthContext, token: string, id: string, input: UpdateIpdPricingInput) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const before = await repo.findIpdPricing(client, auth.tenantId, id);
+    if (!before) throw NotFound('Pricing item not found');
+    const patch: Record<string, unknown> = {};
+    if (input.name      !== undefined) patch.name       = input.name;
+    if (input.code      !== undefined) patch.code       = input.code;
+    if (input.category  !== undefined) patch.category   = input.category;
+    if (input.unitPrice !== undefined) patch.unit_price = input.unitPrice;
+    if (input.unit      !== undefined) patch.unit       = input.unit;
+    if (input.isActive  !== undefined) patch.is_active  = input.isActive;
+    const after = await repo.updateIpdPricing(client, auth.tenantId, id, patch);
+    await audit({ actorUserId: auth.userId, action: 'IPD_PRICING_UPDATED', entity: 'ipd_pricing', entityId: id, before, after });
+    return after;
+  },
+  async deleteIpdPricing(auth: AuthContext, token: string, id: string) {
+    if (!auth.tenantId) throw NotFound('No tenant context');
+    const client = supabaseForUser(token);
+    const before = await repo.findIpdPricing(client, auth.tenantId, id);
+    if (!before) throw NotFound('Pricing item not found');
+    const after = await repo.deleteIpdPricing(client, auth.tenantId, id);
+    await audit({ actorUserId: auth.userId, action: 'IPD_PRICING_DEACTIVATED', entity: 'ipd_pricing', entityId: id });
     return after;
   },
 };

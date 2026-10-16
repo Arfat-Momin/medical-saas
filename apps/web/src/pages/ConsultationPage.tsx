@@ -522,7 +522,12 @@ export function ConsultationPage() {
             action={<Camera size={16} className="text-slate-400" />}
           />
           <CardBody>
-            <ConsultationImages encounterId={e.server_id} editable />
+            <ConsultationImages
+                encounterId={e.server_id}
+                editable
+                patientId={e.patient_server_id}
+                doctorId={e.doctor_id}
+              />
           </CardBody>
         </Card>
       </fieldset>

@@ -103,6 +103,11 @@ export function SubscriptionPage() {
     return true;
   });
 
+  // If the current plan is custom (or otherwise missing from renewable plans), add it so the tenant can renew it.
+  if (plan && !plan.is_free && !renewablePlans.some(p => p.id === plan.id)) {
+    renewablePlans.unshift(plan);
+  }
+
   async function handleUpgrade(planCode: string) {
     setError(null);
     setBusy(true);

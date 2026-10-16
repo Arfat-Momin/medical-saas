@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Search, Printer } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Search, Printer, Boxes } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -141,7 +142,14 @@ export function MedicinesPage() {
                     <td className="px-5 py-3 text-slate-600">{m.gst_rate}%</td>
                     <td className="px-5 py-3 text-slate-600">{m.reorder_level}</td>
                     <td className="px-5 py-3 text-right">
-                      <Button size="sm" variant="secondary" onClick={() => openEdit(m)}>Edit</Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Link to={`/pharmacy/stock?search=${encodeURIComponent(m.name)}`}>
+                          <Button size="sm" variant="secondary" title="View & Edit Stock">
+                            <Boxes size={14} className="mr-1 text-slate-500" /> Stock
+                          </Button>
+                        </Link>
+                        <Button size="sm" variant="secondary" onClick={() => openEdit(m)}>Edit</Button>
+                      </div>
                     </td>
                   </tr>
                 ))}

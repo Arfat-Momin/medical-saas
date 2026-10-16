@@ -135,6 +135,19 @@ export function useDispense() {
 export function useLowStock() { return useQuery({ queryKey: LOW, queryFn: repo.lowStock }); }
 export function useExpiring() { return useQuery({ queryKey: EXP, queryFn: repo.expiring }); }
 
+export function useCreateBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: repo.createBatch,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: BAT });
+      qc.invalidateQueries({ queryKey: LOW });
+      qc.invalidateQueries({ queryKey: EXP });
+      qc.invalidateQueries({ queryKey: MED });
+    },
+  });
+}
+
 export function useAdjustStock() {
   const qc = useQueryClient();
   return useMutation({
@@ -142,6 +155,7 @@ export function useAdjustStock() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: BAT });
       qc.invalidateQueries({ queryKey: LOW });
+      qc.invalidateQueries({ queryKey: EXP });
     },
   });
 }

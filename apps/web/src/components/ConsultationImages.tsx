@@ -17,12 +17,16 @@ interface Props {
   encounterId: string | null | undefined;
   editable?: boolean;
   title?: string;
+  patientId?: string | null;
+  doctorId?: string | null;
 }
 
 export function ConsultationImages({
   encounterId,
   editable = false,
   title = 'Attachments',
+  patientId,
+  doctorId,
 }: Props) {
   const query  = useEncounterAttachments(encounterId ?? undefined);
   const upload = useUploadEncounterAttachment(encounterId ?? '');
@@ -34,7 +38,9 @@ export function ConsultationImages({
   const [error, setError]       = useState<string | null>(null);
   const [busy, setBusy]         = useState(false);
   const [lightbox, setLightbox] = useState<EncounterAttachment | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [docType, setDocType]   = useState<'PRESCRIPTION' | 'REPORT' | 'XRAY' | 'ECG' | 'CONSENT' | 'OTHER'>('OTHER');
+  const fileRef   = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   if (!encounterId) {
     if (!editable) return null;
@@ -45,7 +51,7 @@ export function ConsultationImages({
     );
   }
 
-  async function onPick(files: FileList | null) {
+  async function onPick(files: FileList | null, captureMode: 'CAMERA' | 'UPLOAD' = 'UPLOAD') {
     if (!files || files.length === 0) return;
     if (!tenantId || !userId) {
       setError('Missing tenant or user context.');
@@ -61,13 +67,24 @@ export function ConsultationImages({
           continue;
         }
         const { blob, width, height } = await compressImage(file);
-        await upload.mutateAsync({ tenantId, userId, blob, width, height });
+        await upload.mutateAsync({
+          tenantId,
+          userId,
+          blob,
+          width,
+          height,
+          patientId: patientId ?? null,
+          doctorId: doctorId ?? null,
+          captureMode,
+          documentType: docType,
+        });
       }
     } catch (e: any) {
       setError(e?.message ?? 'Upload failed');
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = '';
+      if (cameraRef.current) cameraRef.current.value = '';
     }
   }
 
@@ -89,26 +106,54 @@ export function ConsultationImages({
 
       {editable && (
         <>
+          {/* Hidden camera input */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => onPick(e.target.files, 'CAMERA')}
+          />
+          {/* Hidden file input */}
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
-            capture="environment"
             multiple
             className="hidden"
-            onChange={(e) => onPick(e.target.files)}
+            onChange={(e) => onPick(e.target.files, 'UPLOAD')}
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => cameraRef.current?.click()}
               loading={busy || upload.isPending}
               leftIcon={<Camera size={14} />}
             >
-              Take / attach photo
+              Camera
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => fileRef.current?.click()}
+              loading={busy || upload.isPending}
+              leftIcon={<ImageIcon size={14} />}
+            >
+              Upload file
+            </Button>
+            <select
+              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-400"
+              value={docType}
+              onChange={(e) => setDocType(e.target.value as any)}
+            >
+              {['OTHER','PRESCRIPTION','REPORT','XRAY','ECG','CONSENT'].map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
           </div>
         </>
       )}

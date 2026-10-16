@@ -76,6 +76,17 @@ export const adjustStockSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
+// ---- Batches ----
+export const createBatchSchema = z.object({
+  medicineId: z.string().uuid(),
+  batchNo: z.string().min(1).max(50),
+  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  initialQty: z.coerce.number().int().min(0).default(0),
+  purchasePrice: z.coerce.number().nonnegative().optional(),
+  mrp: z.coerce.number().nonnegative().optional(),
+  sellingPrice: z.coerce.number().nonnegative().optional(),
+});
+
 export type CreateMedicineInput = z.infer<typeof createMedicineSchema>;
 export type UpdateMedicineInput = z.infer<typeof updateMedicineSchema>;
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
@@ -83,4 +94,5 @@ export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
 export type ReceivePurchaseInput = z.infer<typeof receivePurchaseSchema>;
 export type DispenseInput = z.infer<typeof dispenseSchema>;
 export type AdjustStockInput = z.infer<typeof adjustStockSchema>;
+export type CreateBatchInput = z.infer<typeof createBatchSchema>;
 export type ListMedicinesQuery = z.infer<typeof listMedicinesQuerySchema>;

@@ -62,9 +62,14 @@ export function PatientDetailPage() {
               </p>
             </div>
           </div>
-          {pt.blood_group && (
-            <Badge tone="red" className="px-3 py-1.5 text-sm">{pt.blood_group}</Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {pt.coverage_type && pt.coverage_type !== 'NONE' && (
+              <Badge tone="blue" className="px-3 py-1.5 text-sm">{pt.coverage_type.replace('_', ' ')}</Badge>
+            )}
+            {pt.blood_group && (
+              <Badge tone="red" className="px-3 py-1.5 text-sm">{pt.blood_group}</Badge>
+            )}
+          </div>
         </CardBody>
       </Card>
 
@@ -90,6 +95,19 @@ export function PatientDetailPage() {
             <Field label="Blood group" value={pt.blood_group ?? '-'} />
             <Field label="Allergies" value={pt.allergies ?? 'None recorded'} />
             <Field label="Medical history" value={pt.medical_history ?? 'None recorded'} />
+          </CardBody>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader title="Registration & Coverage" />
+          <CardBody className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+            <Field label="Registration Fee" value={pt.registration_amount ? `₹${pt.registration_amount} (${pt.reg_payment_mode ?? ''})` : '-'} />
+            <Field label="Coverage Type" value={pt.coverage_type?.replace('_', ' ') ?? 'None'} />
+            <Field label="Coverage Provider" value={pt.coverage_provider ?? '-'} />
+            <Field label="Policy Number" value={pt.policy_number ?? '-'} />
+            <Field label="Validity Date" value={pt.coverage_validity ?? '-'} />
+            <Field label="First Visit Reason" value={pt.first_visit_reason ?? '-'} />
+            <Field label="First Visit Date" value={pt.first_visit_at ? new Date(pt.first_visit_at).toLocaleString() : '-'} />
           </CardBody>
         </Card>
       </div>

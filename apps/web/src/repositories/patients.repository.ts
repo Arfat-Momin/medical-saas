@@ -1,6 +1,7 @@
 import { db, uuid, meta, type LocalPatient } from '@/db';
 import { syncQueue } from '@/sync/queue';
 import { useAuthStore } from '@/stores/auth.store';
+import { api } from '@/lib/api';
 
 /** What the UI expects (kept for compatibility with existing components). */
 export interface Patient {
@@ -19,6 +20,19 @@ export interface Patient {
   allergies: string | null;
   medical_history: string | null;
   emergency_contact: string | null;
+  registration_amount: number | null;
+  reg_payment_mode: 'CASH' | 'CARD' | 'UPI' | 'CHEQUE' | 'NEFT_RTGS' | null;
+  reg_payment_date: string | null;
+  reg_receipt_no: string | null;
+  coverage_type: 'NONE' | 'GOVERNMENT_POLICY' | 'MEDICLAIM_INSURANCE' | 'PACKAGE' | 'SWASTHYA_SATHI' | 'OTHER' | null;
+  coverage_provider: string | null;
+  policy_number: string | null;
+  coverage_validity: string | null;
+  coverage_notes: string | null;
+  first_visit_reason: string | null;
+  first_doctor_id: string | null;
+  first_department_id: string | null;
+  first_visit_at: string | null;
   sync_status: 'pending' | 'synced' | 'failed' | 'conflict' | 'blocked';
   created_at: string;
   updated_at: string;
@@ -41,6 +55,19 @@ export interface CreatePatientInput {
   allergies?: string | null;
   medicalHistory?: string | null;
   emergencyContact?: string | null;
+  registrationAmount?: number | null;
+  regPaymentMode?: string | null;
+  regPaymentDate?: string | null;
+  regReceiptNo?: string | null;
+  coverageType?: string | null;
+  coverageProvider?: string | null;
+  policyNumber?: string | null;
+  coverageValidity?: string | null;
+  coverageNotes?: string | null;
+  firstVisitReason?: string | null;
+  firstDoctorId?: string | null;
+  firstDepartmentId?: string | null;
+  firstVisitAt?: string | null;
   branchId?: string;
   skipDuplicateCheck?: boolean;
 }
@@ -72,6 +99,19 @@ function toPatient(p: LocalPatient): Patient {
     allergies: p.allergies,
     medical_history: p.medical_history,
     emergency_contact: p.emergency_contact,
+    registration_amount: p.registration_amount,
+    reg_payment_mode: p.reg_payment_mode,
+    reg_payment_date: p.reg_payment_date,
+    reg_receipt_no: p.reg_receipt_no,
+    coverage_type: p.coverage_type,
+    coverage_provider: p.coverage_provider,
+    policy_number: p.policy_number,
+    coverage_validity: p.coverage_validity,
+    coverage_notes: p.coverage_notes,
+    first_visit_reason: p.first_visit_reason,
+    first_doctor_id: p.first_doctor_id,
+    first_department_id: p.first_department_id,
+    first_visit_at: p.first_visit_at,
     sync_status: p.sync_status,
     created_at: p.created_at,
     updated_at: p.updated_at,
@@ -132,21 +172,113 @@ export const patientsRepository = {
     const tenantId = useAuthStore.getState().tenantId;
     const branchId = input.branchId ?? useAuthStore.getState().primaryBranchId;
 
+    const payload = {
+      fullName: input.fullName.trim(),
+      dateOfBirth: input.dateOfBirth ?? null,
+      gender: input.gender ?? null,
+      mobile: input.mobile ?? null,
+      address: input.address ?? null,
+      bloodGroup: input.bloodGroup ?? null,
+      allergies: input.allergies ?? null,
+      medicalHistory: input.medicalHistory ?? null,
+      emergencyContact: input.emergencyContact ?? null,
+      registrationAmount: input.registrationAmount ?? null,
+      regPaymentMode: input.regPaymentMode ?? null,
+      regPaymentDate: input.regPaymentDate ?? null,
+      regReceiptNo: input.regReceiptNo ?? null,
+      coverageType: input.coverageType ?? 'NONE',
+      coverageProvider: input.coverageProvider ?? null,
+      policyNumber: input.policyNumber ?? null,
+      coverageValidity: input.coverageValidity ?? null,
+      coverageNotes: input.coverageNotes ?? null,
+      firstVisitReason: input.firstVisitReason ?? null,
+      firstDoctorId: input.firstDoctorId ?? null,
+      firstDepartmentId: input.firstDepartmentId ?? null,
+      firstVisitAt: input.firstVisitAt ?? null,
+      branchId,
+      ...(input.skipDuplicateCheck === true ? { skipDuplicateCheck: true } : {}),
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+      try {
+        // Direct online path
+        const serverPatient = await api.post<any>('/patients', payload);
+        const patient: LocalPatient = {
+          local_id: localId,
+          server_id: serverPatient.id,
+          tenant_id: tenantId,
+          branch_id: branchId ?? null,
+          uhid: serverPatient.uhid,
+          full_name: serverPatient.full_name,
+          date_of_birth: serverPatient.date_of_birth,
+          gender: serverPatient.gender,
+          mobile: serverPatient.mobile,
+          address: serverPatient.address,
+          blood_group: serverPatient.blood_group,
+          allergies: serverPatient.allergies,
+          medical_history: serverPatient.medical_history,
+          emergency_contact: serverPatient.emergency_contact,
+          registration_amount: serverPatient.registration_amount,
+          reg_payment_mode: serverPatient.reg_payment_mode,
+          reg_payment_date: serverPatient.reg_payment_date,
+          reg_receipt_no: serverPatient.reg_receipt_no,
+          coverage_type: serverPatient.coverage_type,
+          coverage_provider: serverPatient.coverage_provider,
+          policy_number: serverPatient.policy_number,
+          coverage_validity: serverPatient.coverage_validity,
+          coverage_notes: serverPatient.coverage_notes,
+          first_visit_reason: serverPatient.first_visit_reason,
+          first_doctor_id: serverPatient.first_doctor_id,
+          first_department_id: serverPatient.first_department_id,
+          first_visit_at: serverPatient.first_visit_at,
+          sync_status: 'synced',
+          sync_error: null,
+          server_updated_at: serverPatient.updated_at,
+          created_at: serverPatient.created_at,
+          updated_at: serverPatient.updated_at,
+          deleted: 0,
+        };
+        await db.patients.add(patient);
+        return toPatient(patient);
+      } catch (e: any) {
+        // If it's a conflict or validation error from server, throw it.
+        // If it's a network/offline error, fallback to queue.
+        if (e.status === 409 || (e.status && e.status >= 400 && e.status < 500)) {
+          throw e;
+        }
+        console.warn('Direct API call failed, falling back to offline queue', e);
+      }
+    }
+
+    // Offline / Queue fallback path
     const patient: LocalPatient = {
       local_id: localId,
       server_id: null,
       tenant_id: tenantId,
       branch_id: branchId ?? null,
       uhid: null,
-      full_name: input.fullName.trim(),
-      date_of_birth: input.dateOfBirth ?? null,
-      gender: input.gender ?? null,
-      mobile: input.mobile ?? null,
-      address: input.address ?? null,
-      blood_group: input.bloodGroup ?? null,
-      allergies: input.allergies ?? null,
-      medical_history: input.medicalHistory ?? null,
-      emergency_contact: input.emergencyContact ?? null,
+      full_name: payload.fullName,
+      date_of_birth: payload.dateOfBirth,
+      gender: payload.gender,
+      mobile: payload.mobile,
+      address: payload.address,
+      blood_group: payload.bloodGroup,
+      allergies: payload.allergies,
+      medical_history: payload.medicalHistory,
+      emergency_contact: payload.emergencyContact,
+      registration_amount: payload.registrationAmount,
+      reg_payment_mode: payload.regPaymentMode as any,
+      reg_payment_date: payload.regPaymentDate,
+      reg_receipt_no: payload.regReceiptNo,
+      coverage_type: payload.coverageType as any,
+      coverage_provider: payload.coverageProvider,
+      policy_number: payload.policyNumber,
+      coverage_validity: payload.coverageValidity,
+      coverage_notes: payload.coverageNotes,
+      first_visit_reason: payload.firstVisitReason,
+      first_doctor_id: payload.firstDoctorId,
+      first_department_id: payload.firstDepartmentId,
+      first_visit_at: payload.firstVisitAt,
       sync_status: 'pending',
       sync_error: null,
       server_updated_at: null,
@@ -157,31 +289,11 @@ export const patientsRepository = {
 
     await db.patients.add(patient);
 
-    // Enqueue for background push.
-    //
-    // INTEGRITY:
-    //   `skipDuplicateCheck: true` is sent ONLY when the caller
-    //   explicitly asked for it (after the UI showed the user a local
-    //   duplicate warning and they clicked "Register anyway"). In every
-    //   other case the backend performs its own authoritative duplicate
-    //   check against the server data, which the local cache cannot
-    //   see.
     await syncQueue.enqueue({
       entity: 'patients',
       operation: 'create',
       localId,
-      payload: {
-        fullName: patient.full_name,
-        dateOfBirth: patient.date_of_birth,
-        gender: patient.gender,
-        mobile: patient.mobile,
-        address: patient.address,
-        bloodGroup: patient.blood_group,
-        allergies: patient.allergies,
-        medicalHistory: patient.medical_history,
-        emergencyContact: patient.emergency_contact,
-        ...(input.skipDuplicateCheck === true ? { skipDuplicateCheck: true } : {}),
-      },
+      payload,
     });
 
     return toPatient(patient);
@@ -202,6 +314,19 @@ export const patientsRepository = {
       allergies: 'allergies',
       medicalHistory: 'medical_history',
       emergencyContact: 'emergency_contact',
+      registrationAmount: 'registration_amount',
+      regPaymentMode: 'reg_payment_mode',
+      regPaymentDate: 'reg_payment_date',
+      regReceiptNo: 'reg_receipt_no',
+      coverageType: 'coverage_type',
+      coverageProvider: 'coverage_provider',
+      policyNumber: 'policy_number',
+      coverageValidity: 'coverage_validity',
+      coverageNotes: 'coverage_notes',
+      firstVisitReason: 'first_visit_reason',
+      firstDoctorId: 'first_doctor_id',
+      firstDepartmentId: 'first_department_id',
+      firstVisitAt: 'first_visit_at',
       branchId: 'branch_id',
       skipDuplicateCheck: 'local_id', // no-op
     };
@@ -401,6 +526,19 @@ export const patientsRepository = {
         allergies: server.allergies,
         medical_history: server.medical_history,
         emergency_contact: server.emergency_contact,
+        registration_amount: server.registration_amount ?? null,
+        reg_payment_mode: server.reg_payment_mode ?? null,
+        reg_payment_date: server.reg_payment_date ?? null,
+        reg_receipt_no: server.reg_receipt_no ?? null,
+        coverage_type: server.coverage_type ?? 'NONE',
+        coverage_provider: server.coverage_provider ?? null,
+        policy_number: server.policy_number ?? null,
+        coverage_validity: server.coverage_validity ?? null,
+        coverage_notes: server.coverage_notes ?? null,
+        first_visit_reason: server.first_visit_reason ?? null,
+        first_doctor_id: server.first_doctor_id ?? null,
+        first_department_id: server.first_department_id ?? null,
+        first_visit_at: server.first_visit_at ?? null,
         sync_status: 'synced',
         sync_error: null,
         server_updated_at: server.updated_at,
@@ -424,6 +562,19 @@ export const patientsRepository = {
       allergies: server.allergies,
       medical_history: server.medical_history,
       emergency_contact: server.emergency_contact,
+      registration_amount: server.registration_amount ?? null,
+      reg_payment_mode: server.reg_payment_mode ?? null,
+      reg_payment_date: server.reg_payment_date ?? null,
+      reg_receipt_no: server.reg_receipt_no ?? null,
+      coverage_type: server.coverage_type ?? 'NONE',
+      coverage_provider: server.coverage_provider ?? null,
+      policy_number: server.policy_number ?? null,
+      coverage_validity: server.coverage_validity ?? null,
+      coverage_notes: server.coverage_notes ?? null,
+      first_visit_reason: server.first_visit_reason ?? null,
+      first_doctor_id: server.first_doctor_id ?? null,
+      first_department_id: server.first_department_id ?? null,
+      first_visit_at: server.first_visit_at ?? null,
       sync_status: 'synced',
       sync_error: null,
       server_updated_at: server.updated_at,

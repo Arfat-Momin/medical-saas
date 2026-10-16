@@ -25,6 +25,7 @@ export const syncQueue = {
       last_error: null,
       status: 'pending',
       next_retry_at: null,
+      server_ack: null,
       created_at: now,
     };
     await db.queue.add(item);

@@ -10,6 +10,9 @@ export interface Location {
   code: string | null;
   capacity: number | null;
   is_active: boolean;
+  ward_category: 'GENERAL' | 'MALE' | 'FEMALE' | 'ICU' | 'CABIN' | 'PRIVATE' | 'CUSTOM' | null;
+  daily_rate: number | null;
+  pricing_notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +40,7 @@ export interface Admission {
   patient_id: string;
   bed_id: string;
   admitting_doctor: string;
+  ip_number: string | null;
   admitted_at: string;
   expected_discharge: string | null;
   discharged_at: string | null;
@@ -46,6 +50,8 @@ export interface Admission {
   notes: string | null;
   discharge_summary: string | null;
   discharge_type: string | null;
+  consent_signature: string | null;
+  consent_signed_at: string | null;
   created_at: string;
   updated_at: string;
   patients?: { id: string; uhid: string; full_name: string; mobile: string | null; date_of_birth: string | null; gender: string | null };
@@ -119,9 +125,9 @@ export const ipdRepository = {
     Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, String(v)); });
     return api.get<Location[]>(`/ipd/locations?${qs.toString()}`);
   },
-  createLocation: (input: { branchId: string; parentId?: string | null; type: string; name: string; code?: string | null; capacity?: number | null }) =>
+  createLocation: (input: { branchId: string; parentId?: string | null; type: string; name: string; code?: string | null; capacity?: number | null; wardCategory?: string | null; dailyRate?: number | null; pricingNotes?: string | null }) =>
     api.post<Location>('/ipd/locations', input),
-  updateLocation: (id: string, patch: { name?: string; code?: string | null; capacity?: number | null; isActive?: boolean }) =>
+  updateLocation: (id: string, patch: { name?: string; code?: string | null; capacity?: number | null; isActive?: boolean; wardCategory?: string | null; dailyRate?: number | null; pricingNotes?: string | null }) =>
     api.patch<Location>(`/ipd/locations/${id}`, patch),
   deleteLocation: (id: string) => api.delete<{ success: boolean }>(`/ipd/locations/${id}`),
 
@@ -149,4 +155,33 @@ export const ipdRepository = {
     api.post<MarRecord>(`/ipd/admissions/${admissionId}/mar`, input),
   markMar: (marId: string, input: { status: string; notes?: string | null }) =>
     api.patch<MarRecord>(`/ipd/mar/${marId}`, input),
+  signConsent: (admissionId: string, signature: string) =>
+    api.post<Admission>(`/ipd/admissions/${admissionId}/consent`, { signature }),
+
+  // ---- IPD Pricing ----
+  listIpdPricing: (params: { branchId?: string; category?: string; isActive?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined) qs.set(k, String(v)); });
+    return api.get<IpdPricing[]>(`/ipd/pricing?${qs.toString()}`);
+  },
+  createIpdPricing: (input: { branchId?: string; category: string; name: string; code?: string | null; unitPrice: number; unit?: string }) =>
+    api.post<IpdPricing>('/ipd/pricing', input),
+  updateIpdPricing: (id: string, input: { name?: string; code?: string | null; category?: string; unitPrice?: number; unit?: string; isActive?: boolean }) =>
+    api.patch<IpdPricing>(`/ipd/pricing/${id}`, input),
+  deleteIpdPricing: (id: string) =>
+    api.delete<IpdPricing>(`/ipd/pricing/${id}`),
 };
+
+export interface IpdPricing {
+  id: string;
+  tenant_id: string;
+  branch_id: string | null;
+  category: 'WARD' | 'ICU' | 'CABIN' | 'NURSING' | 'SERVICE' | 'PACKAGE' | 'TAX';
+  name: string;
+  code: string | null;
+  unit_price: number;
+  unit: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
